@@ -1,0 +1,25 @@
+# Classical Ramanujan formula; useful validation target, not a challenger.
+id=R-396
+family=Ramanujan classical
+recurrence=t[n+1]=((4n+1)(4n+2)(4n+3)(4n+4))/((n+1)^4*396^4)t[n]
+estimated_digits_per_term=8.0
+discriminant=-4
+class_invariant=sqrt(8)/9801
+algebraic_height_bits=32
+polynomial_degree=4
+numerator_degree=4
+denominator_degree=4
+binary_splitting_ready=yes
+proof_status=symbolic_certified
+implementation_notes=Implemented as ramanujan_classic_bs through the generic binary-splitting compiler.
+p_factors=4n+1,4n+2,4n+3,4n+4
+q_factors=n+1,n+1,n+1,n+1
+q_constant=24591257856
+linear_a=26390
+linear_b=1103
+alternating=no
+unit_first_p=no
+unit_first_q=no
+leaf_t_multiplier=q
+gcd_cancellation=no
+constant_expression=9801/(2*sqrt(2))

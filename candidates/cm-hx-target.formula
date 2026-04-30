@@ -1,0 +1,25 @@
+# Speculative SATO-X target class from the research notes.
+id=CM-HX
+family=CM hyperdescent target
+recurrence=t[n+1]=r_CMHX(n)*t[n]
+estimated_digits_per_term=16.2
+discriminant=-d
+class_invariant=low-height CM class invariant
+algebraic_height_bits=80
+polynomial_degree=4
+numerator_degree=4
+denominator_degree=4
+binary_splitting_ready=yes
+proof_status=metadata
+implementation_notes=Golden target class; requires discovery, exact recurrence, proof certificate, and independent verification.
+p_factors=
+q_factors=
+q_constant=1
+linear_a=0
+linear_b=0
+alternating=no
+unit_first_p=no
+unit_first_q=no
+leaf_t_multiplier=p
+gcd_cancellation=yes
+constant_expression=unknown

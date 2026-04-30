@@ -1,0 +1,25 @@
+# Known baseline formula for calibration.
+id=C-163
+family=Chudnovsky baseline
+recurrence=t[n+1]=-(6n+1)(6n+5)(2n+1)/(10939058860032000(n+1)^3)t[n]
+estimated_digits_per_term=14.181647
+discriminant=-163
+class_invariant=j(-163)
+algebraic_height_bits=48
+polynomial_degree=3
+numerator_degree=3
+denominator_degree=3
+binary_splitting_ready=yes
+proof_status=symbolic_certified
+implementation_notes=Implemented as chudnovsky_bs through the generic binary-splitting compiler.
+p_factors=6n-5,2n-1,6n-1
+q_factors=n,n,n
+q_constant=10939058860032000
+linear_a=545140134
+linear_b=13591409
+alternating=yes
+unit_first_p=yes
+unit_first_q=yes
+leaf_t_multiplier=p
+gcd_cancellation=no
+constant_expression=426880*sqrt(10005)
