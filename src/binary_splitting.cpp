@@ -5,6 +5,8 @@
 namespace satox {
 namespace {
 
+constexpr unsigned long kLeafBlockTerms = 8;
+
 void set_linear_product(mpz_t out, const std::vector<LinearFactor> &factors, unsigned long n) {
     mpz_set_ui(out, 1ul);
     for (const LinearFactor &factor : factors) {
@@ -47,6 +49,61 @@ void reduce_common_pqt(HypergeometricBsResult &node, BinarySplittingStats *stats
     mpz_clear(g);
 }
 
+void set_leaf(const HypergeometricBsSpec &spec, unsigned long n, HypergeometricBsResult &out,
+              BinarySplittingStats *stats) {
+    if (n == 0 && spec.unit_first_p) {
+        mpz_set_ui(out.p, 1ul);
+    } else {
+        set_linear_product(out.p, spec.p_factors, n);
+    }
+
+    if (n == 0 && spec.unit_first_q) {
+        mpz_set_ui(out.q, 1ul);
+    } else {
+        set_linear_product(out.q, spec.q_factors, n);
+    }
+    if (!(n == 0 && spec.unit_first_q) && spec.q_constant != 1ul) {
+        mpz_mul_ui(out.q, out.q, spec.q_constant);
+    }
+
+    mpz_set(out.t, spec.leaf_t_uses_q ? out.q : out.p);
+    const long lin = linear_value(spec.linear_a, spec.linear_b, n);
+    if (lin < 0) {
+        mpz_mul_si(out.t, out.t, lin);
+    } else {
+        mpz_mul_ui(out.t, out.t, static_cast<unsigned long>(lin));
+    }
+    if (spec.alternating && (n & 1ul) != 0) {
+        mpz_neg(out.t, out.t);
+    }
+    if (spec.gcd_cancellation) {
+        reduce_common_pqt(out, stats);
+    }
+}
+
+void combine_nodes(const HypergeometricBsSpec &spec, const HypergeometricBsResult &left,
+                   const HypergeometricBsResult &right, HypergeometricBsResult &out,
+                   BinarySplittingStats *stats) {
+    mpz_mul(out.p, left.p, right.p);
+    mpz_mul(out.q, left.q, right.q);
+    mpz_mul(out.t, left.t, right.q);
+    mpz_addmul(out.t, left.p, right.t);
+    if (spec.gcd_cancellation) {
+        reduce_common_pqt(out, stats);
+    }
+}
+
+void append_leaf(const HypergeometricBsSpec &spec, HypergeometricBsResult &out,
+                 const HypergeometricBsResult &leaf, BinarySplittingStats *stats) {
+    mpz_mul(out.t, out.t, leaf.q);
+    mpz_addmul(out.t, out.p, leaf.t);
+    mpz_mul(out.p, out.p, leaf.p);
+    mpz_mul(out.q, out.q, leaf.q);
+    if (spec.gcd_cancellation) {
+        reduce_common_pqt(out, stats);
+    }
+}
+
 } // namespace
 
 HypergeometricBsResult::HypergeometricBsResult() {
@@ -68,34 +125,14 @@ void binary_split_hypergeometric(const HypergeometricBsSpec &spec, unsigned long
         throw std::invalid_argument("binary_split_hypergeometric requires b > a");
     }
 
-    if (b - a == 1) {
-        if (a == 0 && spec.unit_first_p) {
-            mpz_set_ui(out.p, 1ul);
-        } else {
-            set_linear_product(out.p, spec.p_factors, a);
-        }
-
-        if (a == 0 && spec.unit_first_q) {
-            mpz_set_ui(out.q, 1ul);
-        } else {
-            set_linear_product(out.q, spec.q_factors, a);
-        }
-        if (!(a == 0 && spec.unit_first_q) && spec.q_constant != 1ul) {
-            mpz_mul_ui(out.q, out.q, spec.q_constant);
-        }
-
-        mpz_set(out.t, spec.leaf_t_uses_q ? out.q : out.p);
-        const long lin = linear_value(spec.linear_a, spec.linear_b, a);
-        if (lin < 0) {
-            mpz_mul_si(out.t, out.t, lin);
-        } else {
-            mpz_mul_ui(out.t, out.t, static_cast<unsigned long>(lin));
-        }
-        if (spec.alternating && (a & 1ul) != 0) {
-            mpz_neg(out.t, out.t);
-        }
-        if (spec.gcd_cancellation) {
-            reduce_common_pqt(out, stats);
+    if (b - a <= kLeafBlockTerms) {
+        set_leaf(spec, a, out, stats);
+        if (b - a > 1) {
+            HypergeometricBsResult leaf;
+            for (unsigned long n = a + 1; n < b; ++n) {
+                set_leaf(spec, n, leaf, stats);
+                append_leaf(spec, out, leaf, stats);
+            }
         }
         return;
     }
@@ -105,22 +142,7 @@ void binary_split_hypergeometric(const HypergeometricBsSpec &spec, unsigned long
     HypergeometricBsResult right;
     binary_split_hypergeometric(spec, a, m, left, stats);
     binary_split_hypergeometric(spec, m, b, right, stats);
-
-    mpz_mul(out.p, left.p, right.p);
-    mpz_mul(out.q, left.q, right.q);
-
-    mpz_t left_scaled;
-    mpz_t right_scaled;
-    mpz_init(left_scaled);
-    mpz_init(right_scaled);
-    mpz_mul(left_scaled, left.t, right.q);
-    mpz_mul(right_scaled, left.p, right.t);
-    mpz_add(out.t, left_scaled, right_scaled);
-    mpz_clear(left_scaled);
-    mpz_clear(right_scaled);
-    if (spec.gcd_cancellation) {
-        reduce_common_pqt(out, stats);
-    }
+    combine_nodes(spec, left, right, out, stats);
 }
 
 void binary_split_hypergeometric(const HypergeometricBsSpec &spec, unsigned long a,

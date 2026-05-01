@@ -185,6 +185,10 @@ int run_benchmark(const BenchmarkOptions &options) {
     md << "# SATO-X Benchmark Summary\n\n";
     md << "Guard digits: `" << options.guard_digits << "`\n\n";
     md << "Trials per row: `" << options.trials << "`; warmups: `" << options.warmups << "`\n\n";
+    md << "Optimization notes: shared binary splitting uses an `mpz_addmul` merge "
+          "to avoid one temporary large-integer product per internal node, folds "
+          "small 8-term leaf blocks before recursion, and Ramanujan uses "
+          "`log10(396^4 / 256)` for term-count estimation.\n\n";
     md << "| Digits | Algorithm | Supported | Verified | Median wall ms | Min | Max | Stddev | Terms/iterations | GCD reductions | Cancelled bits | "
           "Relative to Chudnovsky | Notes |\n";
     md << "|---:|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|\n";

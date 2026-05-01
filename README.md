@@ -107,6 +107,10 @@ The figures are written to `docs/figures/`:
 - `terms_or_iterations.svg`
 - `verification_matrix.svg`
 
+An interactive animation is available at
+`docs/animations/algorithm-comparison.html`. It compares the same benchmark data
+as a wall-time race, convergence-work animation, and verification matrix.
+
 ## Implemented Algorithms
 
 - `chudnovsky_bs`: Chudnovsky binary splitting baseline.
@@ -129,6 +133,14 @@ candidate compiler for recurrence-defined Ramanujan-Sato formulas.
 
 Chudnovsky and Ramanujan now both use that shared compiler internally; their
 algorithm files keep only the formula constants and final normalization.
+
+The shared binary-splitting merge path is optimized to avoid one temporary
+large-integer product per internal node by using `mpz_addmul`, and it folds
+small 8-term leaf blocks before recursing. Ramanujan now uses the actual
+asymptotic convergence rate `log10(396^4 / 256)` instead of the rounded
+`8.0`, which lets the harness verify it at `1000000` digits without
+under-counting required terms. Current regenerated results still show
+Chudnovsky as the verified winner at `10000`, `100000`, and `1000000` digits.
 
 The compiler supports opt-in `gcd_cancellation=yes`, which safely divides only
 common factors shared by `P`, `Q`, and `T`. It is disabled for the current

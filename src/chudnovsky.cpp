@@ -63,7 +63,7 @@ class ChudnovskyAlgorithm final : public PiAlgorithm {
         result.terms_or_iterations = terms;
 
         HypergeometricBsResult node;
-        BinarySplittingStats bs_stats;
+        BinarySplittingStats bs_stats{};
         binary_split_hypergeometric(chudnovsky_spec(), 0, terms, node, &bs_stats);
         result.gcd_reductions = bs_stats.gcd_reductions;
         result.cancelled_bits = bs_stats.cancelled_bits;

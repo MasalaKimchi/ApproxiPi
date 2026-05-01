@@ -14,7 +14,7 @@
 namespace satox {
 namespace {
 
-constexpr double kRamanujanDigitsPerTerm = 8.0;
+constexpr double kRamanujanDigitsPerTerm = 7.9825407783902;
 
 HypergeometricBsSpec ramanujan_spec() {
     HypergeometricBsSpec spec;
@@ -31,7 +31,7 @@ HypergeometricBsSpec ramanujan_spec() {
 class RamanujanAlgorithm final : public PiAlgorithm {
   public:
     AlgorithmMetadata metadata() const override {
-        return {"ramanujan_classic_bs", "Ramanujan classical binary splitting", 1, 100000,
+        return {"ramanujan_classic_bs", "Ramanujan classical binary splitting", 1, 1000000,
                 true, false};
     }
 
@@ -60,7 +60,7 @@ class RamanujanAlgorithm final : public PiAlgorithm {
         result.terms_or_iterations = terms;
 
         HypergeometricBsResult node;
-        BinarySplittingStats bs_stats;
+        BinarySplittingStats bs_stats{};
         binary_split_hypergeometric(ramanujan_spec(), 0, terms, node, &bs_stats);
         result.gcd_reductions = bs_stats.gcd_reductions;
         result.cancelled_bits = bs_stats.cancelled_bits;
