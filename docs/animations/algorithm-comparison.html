@@ -118,7 +118,7 @@
     .toolbar {
       padding: 16px;
       display: grid;
-      grid-template-columns: minmax(330px, 1fr) auto auto auto auto;
+      grid-template-columns: auto minmax(160px, 1fr) auto auto;
       gap: 12px;
       align-items: center;
       border-bottom: 1px solid var(--line);
@@ -133,6 +133,7 @@
       border-radius: 8px;
       background: var(--panel);
       width: 100%;
+      grid-column: 1 / -1;
     }
 
     .tab {
@@ -384,10 +385,6 @@
         grid-template-columns: 1fr 1fr;
       }
 
-      .tabs {
-        grid-column: 1 / -1;
-      }
-
       header {
         align-items: flex-start;
         flex-direction: column;
@@ -465,7 +462,7 @@
       </div>
       <div class="source-stack">
         <div class="source">Data: results/benchmark.csv</div>
-        <div class="source optimized">Optimized: addmul merge, 8-term leaf blocks, verified Ramanujan 1M</div>
+        <div class="source optimized">Optimized: parallel BS, phase timing, addmul merge, 8-term leaf blocks</div>
       </div>
     </header>
 
@@ -534,22 +531,22 @@
     ];
 
     const rows = [
-      { algorithm: "chudnovsky_bs", digits: 1000, supported: true, verified: true, wall: 0.058, min: 0.040, max: 1.778, stddev: 0.998, terms: 83, dpt: 14.181647, relative: 1.000000, method: "MPFR const_pi prefix", error: "" },
-      { algorithm: "ramanujan_classic_bs", digits: 1000, supported: true, verified: true, wall: 0.057, min: 0.055, max: 0.073, stddev: 0.010, terms: 153, dpt: 7.982541, relative: 0.976445, method: "MPFR const_pi prefix", error: "" },
-      { algorithm: "gauss_legendre_agm", digits: 1000, supported: true, verified: true, wall: 0.212, min: 0.095, max: 0.221, stddev: 0.071, terms: 13, dpt: 76.923077, relative: 3.633833, method: "adaptive attempted; full-precision MPFR fallback", error: "" },
-      { algorithm: "borwein_quartic", digits: 1000, supported: true, verified: true, wall: 0.305, min: 0.257, max: 0.317, stddev: 0.031, terms: 7, dpt: 142.857143, relative: 5.219135, method: "adaptive attempted; full-precision MPFR fallback", error: "" },
-      { algorithm: "chudnovsky_bs", digits: 10000, supported: true, verified: true, wall: 0.608, min: 0.562, max: 0.971, stddev: 0.224, terms: 717, dpt: 14.181647, relative: 1.000000, method: "MPFR const_pi prefix", error: "" },
-      { algorithm: "ramanujan_classic_bs", digits: 10000, supported: true, verified: true, wall: 1.023, min: 0.991, max: 1.053, stddev: 0.031, terms: 1280, dpt: 7.982541, relative: 1.682590, method: "MPFR const_pi prefix", error: "" },
-      { algorithm: "gauss_legendre_agm", digits: 10000, supported: true, verified: true, wall: 2.544, min: 2.518, max: 2.717, stddev: 0.108, terms: 16, dpt: 625.000000, relative: 4.185399, method: "adaptive attempted; full-precision MPFR fallback", error: "" },
-      { algorithm: "borwein_quartic", digits: 10000, supported: true, verified: true, wall: 3.241, min: 3.214, max: 3.362, stddev: 0.079, terms: 8, dpt: 1250.000000, relative: 5.330840, method: "adaptive attempted; full-precision MPFR fallback", error: "" },
-      { algorithm: "chudnovsky_bs", digits: 100000, supported: true, verified: true, wall: 12.678, min: 12.668, max: 14.578, stddev: 1.100, terms: 7064, dpt: 14.181647, relative: 1.000000, method: "MPFR const_pi prefix", error: "" },
-      { algorithm: "ramanujan_classic_bs", digits: 100000, supported: true, verified: true, wall: 22.261, min: 21.937, max: 22.560, stddev: 0.311, terms: 12555, dpt: 7.982541, relative: 1.755858, method: "MPFR const_pi prefix", error: "" },
-      { algorithm: "gauss_legendre_agm", digits: 100000, supported: true, verified: true, wall: 59.377, min: 57.148, max: 62.166, stddev: 2.514, terms: 19, dpt: 5263.157895, relative: 4.683518, method: "adaptive attempted; full-precision MPFR fallback", error: "" },
-      { algorithm: "borwein_quartic", digits: 100000, supported: true, verified: true, wall: 81.829, min: 79.713, max: 82.020, stddev: 1.280, terms: 10, dpt: 10000.000000, relative: 6.454422, method: "adaptive attempted; full-precision MPFR fallback", error: "" },
-      { algorithm: "chudnovsky_bs", digits: 1000000, supported: true, verified: true, wall: 241.620, min: 239.712, max: 243.385, stddev: 1.837, terms: 70526, dpt: 14.181647, relative: 1.000000, method: "MPFR const_pi prefix", error: "" },
-      { algorithm: "ramanujan_classic_bs", digits: 1000000, supported: true, verified: true, wall: 433.407, min: 428.925, max: 445.212, stddev: 8.413, terms: 125301, dpt: 7.982541, relative: 1.793754, method: "MPFR const_pi prefix", error: "" },
+      { algorithm: "chudnovsky_bs", digits: 1000, supported: true, verified: true, wall: 0.059, min: 0.054, max: 0.149, stddev: 0.053, terms: 83, dpt: 14.181647, relative: 1.000000, method: "MPFR const_pi prefix", error: "" },
+      { algorithm: "ramanujan_classic_bs", digits: 1000, supported: true, verified: true, wall: 0.079, min: 0.074, max: 0.092, stddev: 0.009, terms: 153, dpt: 7.982541, relative: 1.328421, method: "MPFR const_pi prefix", error: "" },
+      { algorithm: "gauss_legendre_agm", digits: 1000, supported: true, verified: true, wall: 0.102, min: 0.095, max: 0.117, stddev: 0.011, terms: 13, dpt: 76.923077, relative: 1.716497, method: "adaptive attempted; full-precision MPFR fallback", error: "" },
+      { algorithm: "borwein_quartic", digits: 1000, supported: true, verified: true, wall: 0.138, min: 0.137, max: 0.154, stddev: 0.010, terms: 7, dpt: 142.857143, relative: 2.320000, method: "adaptive attempted; full-precision MPFR fallback", error: "" },
+      { algorithm: "chudnovsky_bs", digits: 10000, supported: true, verified: true, wall: 0.713, min: 0.678, max: 0.735, stddev: 0.029, terms: 717, dpt: 14.181647, relative: 1.000000, method: "MPFR const_pi prefix", error: "" },
+      { algorithm: "ramanujan_classic_bs", digits: 10000, supported: true, verified: true, wall: 1.162, min: 1.089, max: 1.292, stddev: 0.103, terms: 1280, dpt: 7.982541, relative: 1.629377, method: "MPFR const_pi prefix", error: "" },
+      { algorithm: "gauss_legendre_agm", digits: 10000, supported: true, verified: true, wall: 2.271, min: 2.227, max: 2.273, stddev: 0.026, terms: 16, dpt: 625.000000, relative: 3.185048, method: "adaptive attempted; full-precision MPFR fallback", error: "" },
+      { algorithm: "borwein_quartic", digits: 10000, supported: true, verified: true, wall: 2.946, min: 2.891, max: 3.007, stddev: 0.058, terms: 8, dpt: 1250.000000, relative: 4.132913, method: "adaptive attempted; full-precision MPFR fallback", error: "" },
+      { algorithm: "chudnovsky_bs", digits: 100000, supported: true, verified: true, wall: 13.352, min: 13.216, max: 13.828, stddev: 0.321, terms: 7064, dpt: 14.181647, relative: 1.000000, method: "MPFR const_pi prefix", error: "" },
+      { algorithm: "ramanujan_classic_bs", digits: 100000, supported: true, verified: true, wall: 16.285, min: 16.232, max: 16.799, stddev: 0.313, terms: 12555, dpt: 7.982541, relative: 1.219658, method: "MPFR const_pi prefix", error: "" },
+      { algorithm: "gauss_legendre_agm", digits: 100000, supported: true, verified: true, wall: 56.177, min: 54.437, max: 56.297, stddev: 1.041, terms: 19, dpt: 5263.157895, relative: 4.207375, method: "adaptive attempted; full-precision MPFR fallback", error: "" },
+      { algorithm: "borwein_quartic", digits: 100000, supported: true, verified: true, wall: 83.308, min: 81.102, max: 93.937, stddev: 6.863, terms: 10, dpt: 10000.000000, relative: 6.239346, method: "adaptive attempted; full-precision MPFR fallback", error: "" },
+      { algorithm: "chudnovsky_bs", digits: 1000000, supported: true, verified: true, wall: 145.798, min: 144.857, max: 166.160, stddev: 12.037, terms: 70526, dpt: 14.181647, relative: 1.000000, method: "MPFR const_pi prefix", error: "" },
+      { algorithm: "ramanujan_classic_bs", digits: 1000000, supported: true, verified: true, wall: 210.999, min: 210.311, max: 211.091, stddev: 0.426, terms: 125301, dpt: 7.982541, relative: 1.447201, method: "MPFR const_pi prefix", error: "" },
       { algorithm: "gauss_legendre_agm", digits: 1000000, supported: false, verified: false, wall: 0.000, min: 0.000, max: 0.000, stddev: 0.000, terms: 0, dpt: 0.000000, relative: 0.000000, method: "", error: "requested precision exceeds algorithm max_digits" },
-      { algorithm: "borwein_quartic", digits: 1000000, supported: true, verified: true, wall: 1441.578, min: 1428.481, max: 1497.352, stddev: 36.573, terms: 11, dpt: 90909.090909, relative: 5.966297, method: "adaptive attempted; full-precision MPFR fallback", error: "" }
+      { algorithm: "borwein_quartic", digits: 1000000, supported: true, verified: true, wall: 1408.448, min: 1405.600, max: 1474.315, stddev: 38.877, terms: 11, dpt: 90909.090909, relative: 9.660289, method: "adaptive attempted; full-precision MPFR fallback", error: "" }
     ];
 
     const byId = Object.fromEntries(algorithms.map((algorithm) => [algorithm.id, algorithm]));

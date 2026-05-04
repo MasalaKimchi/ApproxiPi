@@ -4,26 +4,26 @@ Guard digits: `25`
 
 Trials per row: `3`; warmups: `0`
 
-Optimization notes: shared binary splitting uses an `mpz_addmul` merge to avoid one temporary large-integer product per internal node, folds small 8-term leaf blocks before recursion, and Ramanujan uses `log10(396^4 / 256)` for term-count estimation.
+Optimization notes: shared binary splitting uses bounded parallel subtree evaluation, an `mpz_addmul` merge to avoid one temporary large-integer product per internal node, small 8-term leaf blocks before recursion, and `log10(396^4 / 256)` for Ramanujan term-count estimation. Phase columns expose split/finalize/format/verify bottlenecks.
 
-| Digits | Algorithm | Supported | Verified | Median wall ms | Min | Max | Stddev | Terms/iterations | GCD reductions | Cancelled bits | Relative to Chudnovsky | Notes |
-|---:|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|
-| 1000 | `chudnovsky_bs` | yes | yes | 0.058 | 0.040 | 1.778 | 0.998 | 83 | 0 | 0.000 | 1.000 |  |
-| 1000 | `ramanujan_classic_bs` | yes | yes | 0.057 | 0.055 | 0.073 | 0.010 | 153 | 0 | 0.000 | 0.976 |  |
-| 1000 | `gauss_legendre_agm` | yes | yes | 0.212 | 0.095 | 0.221 | 0.071 | 13 | 0 | 0.000 | 3.634 |  |
-| 1000 | `borwein_quartic` | yes | yes | 0.305 | 0.257 | 0.317 | 0.031 | 7 | 0 | 0.000 | 5.219 |  |
-| 10000 | `chudnovsky_bs` | yes | yes | 0.608 | 0.562 | 0.971 | 0.224 | 717 | 0 | 0.000 | 1.000 |  |
-| 10000 | `ramanujan_classic_bs` | yes | yes | 1.023 | 0.991 | 1.053 | 0.031 | 1280 | 0 | 0.000 | 1.683 |  |
-| 10000 | `gauss_legendre_agm` | yes | yes | 2.544 | 2.518 | 2.717 | 0.108 | 16 | 0 | 0.000 | 4.185 |  |
-| 10000 | `borwein_quartic` | yes | yes | 3.241 | 3.214 | 3.362 | 0.079 | 8 | 0 | 0.000 | 5.331 |  |
-| 100000 | `chudnovsky_bs` | yes | yes | 12.678 | 12.668 | 14.578 | 1.100 | 7064 | 0 | 0.000 | 1.000 |  |
-| 100000 | `ramanujan_classic_bs` | yes | yes | 22.261 | 21.937 | 22.560 | 0.311 | 12555 | 0 | 0.000 | 1.756 |  |
-| 100000 | `gauss_legendre_agm` | yes | yes | 59.377 | 57.148 | 62.166 | 2.514 | 19 | 0 | 0.000 | 4.684 |  |
-| 100000 | `borwein_quartic` | yes | yes | 81.829 | 79.713 | 82.020 | 1.280 | 10 | 0 | 0.000 | 6.454 |  |
-| 1000000 | `chudnovsky_bs` | yes | yes | 241.620 | 239.712 | 243.385 | 1.837 | 70526 | 0 | 0.000 | 1.000 |  |
-| 1000000 | `ramanujan_classic_bs` | yes | yes | 433.407 | 428.925 | 445.212 | 8.413 | 125301 | 0 | 0.000 | 1.794 |  |
-| 1000000 | `gauss_legendre_agm` | no | no | 0.000 | 0.000 | 0.000 | 0.000 | 0 | 0 | 0.000 | 0.000 | requested precision exceeds algorithm max_digits |
-| 1000000 | `borwein_quartic` | yes | yes | 1441.578 | 1428.481 | 1497.352 | 36.573 | 11 | 0 | 0.000 | 5.966 |  |
+| Digits | Algorithm | Supported | Verified | Median wall ms | Split | Finalize | Format | Verify | Terms/iterations | Max operand bits | Parallel depth | Relative to Chudnovsky | Notes |
+|---:|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|
+| 1000 | `chudnovsky_bs` | yes | yes | 0.059 | 0.040 | 0.008 | 0.010 | 0.008 | 83 | 5616 | 0 | 1.000 |  |
+| 1000 | `ramanujan_classic_bs` | yes | yes | 0.079 | 0.062 | 0.006 | 0.009 | 0.007 | 153 | 8870 | 0 | 1.328 |  |
+| 1000 | `gauss_legendre_agm` | yes | yes | 0.102 | 0.000 | 0.095 | 0.013 | 0.013 | 13 | 0 | 0 | 1.716 |  |
+| 1000 | `borwein_quartic` | yes | yes | 0.138 | 0.000 | 0.131 | 0.013 | 0.013 | 7 | 0 | 0 | 2.320 |  |
+| 10000 | `chudnovsky_bs` | yes | yes | 0.713 | 0.445 | 0.131 | 0.132 | 0.130 | 717 | 55463 | 0 | 1.000 |  |
+| 10000 | `ramanujan_classic_bs` | yes | yes | 1.162 | 0.901 | 0.128 | 0.126 | 0.124 | 1280 | 89681 | 0 | 1.629 |  |
+| 10000 | `gauss_legendre_agm` | yes | yes | 2.271 | 0.000 | 2.143 | 0.248 | 0.240 | 16 | 0 | 0 | 3.185 |  |
+| 10000 | `borwein_quartic` | yes | yes | 2.946 | 0.000 | 2.832 | 0.235 | 0.227 | 8 | 0 | 0 | 4.133 |  |
+| 100000 | `chudnovsky_bs` | yes | yes | 13.352 | 7.714 | 2.848 | 2.810 | 2.807 | 7064 | 616721 | 0 | 1.000 |  |
+| 100000 | `ramanujan_classic_bs` | yes | yes | 16.285 | 10.938 | 2.756 | 2.681 | 2.629 | 12555 | 1044752 | 1 | 1.220 |  |
+| 100000 | `gauss_legendre_agm` | yes | yes | 56.177 | 0.000 | 53.492 | 5.496 | 5.662 | 19 | 0 | 0 | 4.207 |  |
+| 100000 | `borwein_quartic` | yes | yes | 83.308 | 0.000 | 80.622 | 5.553 | 5.413 | 10 | 0 | 0 | 6.239 |  |
+| 1000000 | `chudnovsky_bs` | yes | yes | 145.798 | 55.345 | 38.918 | 51.525 | 50.687 | 70526 | 6860005 | 4 | 1.000 |  |
+| 1000000 | `ramanujan_classic_bs` | yes | yes | 210.999 | 120.850 | 38.848 | 50.871 | 50.663 | 125301 | 12089942 | 4 | 1.447 |  |
+| 1000000 | `gauss_legendre_agm` | no | no | 0.000 | 0.000 | 0.000 | 0.000 | 0.000 | 0 | 0 | 0 | 0.000 | requested precision exceeds algorithm max_digits |
+| 1000000 | `borwein_quartic` | yes | yes | 1408.448 | 0.000 | 1357.757 | 101.529 | 101.435 | 11 | 0 | 0 | 9.660 |  |
 
 ## BBP Verification Spots
 

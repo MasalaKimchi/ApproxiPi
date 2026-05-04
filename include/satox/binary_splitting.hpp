@@ -41,6 +41,8 @@ struct HypergeometricBsResult {
 struct BinarySplittingStats {
     unsigned long long gcd_reductions = 0;
     double cancelled_bits = 0.0;
+    unsigned long long max_operand_bits = 0;
+    unsigned int parallel_depth = 0;
 };
 
 void binary_split_hypergeometric(const HypergeometricBsSpec &spec, unsigned long a,
@@ -48,6 +50,12 @@ void binary_split_hypergeometric(const HypergeometricBsSpec &spec, unsigned long
                                  BinarySplittingStats *stats);
 
 void binary_split_hypergeometric(const HypergeometricBsSpec &spec, unsigned long a,
+                                 unsigned long b, HypergeometricBsResult &out,
+                                 BinarySplittingStats *stats, unsigned int parallel_depth);
+
+void binary_split_hypergeometric(const HypergeometricBsSpec &spec, unsigned long a,
                                  unsigned long b, HypergeometricBsResult &out);
+
+unsigned int recommended_parallel_depth(unsigned long terms);
 
 } // namespace satox

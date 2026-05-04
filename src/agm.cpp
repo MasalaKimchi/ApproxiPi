@@ -48,6 +48,9 @@ class AgmAlgorithm final : public PiAlgorithm {
         result.supported = true;
         const int effective_guard_digits = guard_digits + 128;
         const Timer timer;
+        const Timer finalize_timer;
+        double format_ms = 0.0;
+        double verify_ms = 0.0;
 
         const int precision_bits = bits_for_decimal_digits(decimal_digits, effective_guard_digits);
         mpfr_t a;
@@ -114,12 +117,19 @@ class AgmAlgorithm final : public PiAlgorithm {
         mpfr_mul(pi, pi, pi, MPFR_RNDN);
         mpfr_mul_ui(tmp, t, 4ul, MPFR_RNDN);
         mpfr_div(pi, pi, tmp, MPFR_RNDN);
+        result.finalize_ms = finalize_timer.wall_ms();
 
+        const Timer format_timer;
         result.decimal_prefix = mpfr_to_decimal_prefix(pi, decimal_digits);
+        format_ms += format_timer.wall_ms();
         result.wall_ms = timer.wall_ms();
         result.cpu_ms = timer.cpu_ms();
+        const Timer verify_timer;
         result.verified = decimal_prefix_matches_pi(result.decimal_prefix, decimal_digits,
                                                     effective_guard_digits);
+        verify_ms += verify_timer.wall_ms();
+        result.format_ms = format_ms;
+        result.verify_ms = verify_ms;
         result.verification_method = "adaptive MPFR const_pi prefix";
 
         if (!result.verified) {
@@ -153,11 +163,18 @@ class AgmAlgorithm final : public PiAlgorithm {
             mpfr_mul(pi, pi, pi, MPFR_RNDN);
             mpfr_mul_ui(tmp, t, 4ul, MPFR_RNDN);
             mpfr_div(pi, pi, tmp, MPFR_RNDN);
+            result.finalize_ms = finalize_timer.wall_ms();
+            const Timer fallback_format_timer;
             result.decimal_prefix = mpfr_to_decimal_prefix(pi, decimal_digits);
+            format_ms += fallback_format_timer.wall_ms();
             result.wall_ms = timer.wall_ms();
             result.cpu_ms = timer.cpu_ms();
+            const Timer fallback_verify_timer;
             result.verified = decimal_prefix_matches_pi(result.decimal_prefix, decimal_digits,
                                                         effective_guard_digits);
+            verify_ms += fallback_verify_timer.wall_ms();
+            result.format_ms = format_ms;
+            result.verify_ms = verify_ms;
             result.verification_method = "adaptive attempted; full-precision MPFR fallback";
         }
 

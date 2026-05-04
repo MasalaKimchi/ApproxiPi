@@ -30,8 +30,14 @@ struct ComputeResult {
     double estimated_digits_per_term = 0.0;
     double wall_ms = 0.0;
     double cpu_ms = 0.0;
+    double split_ms = 0.0;
+    double finalize_ms = 0.0;
+    double format_ms = 0.0;
+    double verify_ms = 0.0;
     std::uint64_t gcd_reductions = 0;
     double cancelled_bits = 0.0;
+    std::uint64_t max_operand_bits = 0;
+    unsigned int parallel_depth = 0;
 };
 
 class PiAlgorithm {

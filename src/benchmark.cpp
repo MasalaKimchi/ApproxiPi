@@ -27,9 +27,9 @@ std::vector<std::unique_ptr<PiAlgorithm>> make_default_algorithms() {
 
 std::string csv_header() {
     return "algorithm,family,digits,guard_digits,trials,supported,verified,wall_ms,min_wall_ms,"
-           "max_wall_ms,stddev_wall_ms,cpu_ms,"
+           "max_wall_ms,stddev_wall_ms,cpu_ms,split_ms,finalize_ms,format_ms,verify_ms,"
            "terms_or_iterations,estimated_digits_per_term,gcd_reductions,cancelled_bits,"
-           "verification_method,"
+           "max_operand_bits,parallel_depth,verification_method,"
            "baseline,relative_wall_time,prefix_hash,error\n";
 }
 
@@ -43,9 +43,11 @@ std::string result_to_csv(const ComputeResult &result, const std::string &baseli
         << (result.supported ? "true" : "false") << ',' << (result.verified ? "true" : "false")
         << ',' << std::fixed << std::setprecision(3) << result.wall_ms << ','
         << result.wall_ms << ',' << result.wall_ms << ',' << 0.0 << ',' << result.cpu_ms << ','
-        << result.terms_or_iterations << ',' << std::setprecision(6)
+        << result.split_ms << ',' << result.finalize_ms << ',' << result.format_ms << ','
+        << result.verify_ms << ',' << result.terms_or_iterations << ',' << std::setprecision(6)
         << result.estimated_digits_per_term << ',' << result.gcd_reductions << ','
-        << std::setprecision(3) << result.cancelled_bits << ',' << '"'
+        << std::setprecision(3) << result.cancelled_bits << ',' << result.max_operand_bits << ','
+        << result.parallel_depth << ',' << '"'
         << result.verification_method << '"'
         << ',' << baseline_name << ',' << std::setprecision(6) << relative << ','
         << short_hash(result.decimal_prefix) << ',' << '"' << result.error << '"' << '\n';
@@ -62,6 +64,10 @@ struct ResultStats {
     double max_wall_ms = 0.0;
     double stddev_wall_ms = 0.0;
     double median_cpu_ms = 0.0;
+    double median_split_ms = 0.0;
+    double median_finalize_ms = 0.0;
+    double median_format_ms = 0.0;
+    double median_verify_ms = 0.0;
 };
 
 double median(std::vector<double> values) {
@@ -99,9 +105,17 @@ ResultStats summarize_results(std::vector<ComputeResult> results) {
     stats.representative = results.front();
     std::vector<double> wall;
     std::vector<double> cpu;
+    std::vector<double> split;
+    std::vector<double> finalize;
+    std::vector<double> format;
+    std::vector<double> verify;
     for (const ComputeResult &result : results) {
         wall.push_back(result.wall_ms);
         cpu.push_back(result.cpu_ms);
+        split.push_back(result.split_ms);
+        finalize.push_back(result.finalize_ms);
+        format.push_back(result.format_ms);
+        verify.push_back(result.verify_ms);
         if (result.verified && (!stats.representative.verified ||
                                 result.wall_ms < stats.representative.wall_ms)) {
             stats.representative = result;
@@ -112,8 +126,16 @@ ResultStats summarize_results(std::vector<ComputeResult> results) {
     stats.max_wall_ms = *std::max_element(wall.begin(), wall.end());
     stats.stddev_wall_ms = stddev(wall);
     stats.median_cpu_ms = median(cpu);
+    stats.median_split_ms = median(split);
+    stats.median_finalize_ms = median(finalize);
+    stats.median_format_ms = median(format);
+    stats.median_verify_ms = median(verify);
     stats.representative.wall_ms = stats.median_wall_ms;
     stats.representative.cpu_ms = stats.median_cpu_ms;
+    stats.representative.split_ms = stats.median_split_ms;
+    stats.representative.finalize_ms = stats.median_finalize_ms;
+    stats.representative.format_ms = stats.median_format_ms;
+    stats.representative.verify_ms = stats.median_verify_ms;
     return stats;
 }
 
@@ -131,9 +153,12 @@ std::string stats_to_csv(const ResultStats &stats, const std::string &baseline_n
         << (result.verified ? "true" : "false") << ',' << std::fixed
         << std::setprecision(3) << stats.median_wall_ms << ',' << stats.min_wall_ms << ','
         << stats.max_wall_ms << ',' << stats.stddev_wall_ms << ',' << stats.median_cpu_ms << ','
+        << stats.median_split_ms << ',' << stats.median_finalize_ms << ','
+        << stats.median_format_ms << ',' << stats.median_verify_ms << ','
         << result.terms_or_iterations << ',' << std::setprecision(6)
         << result.estimated_digits_per_term << ',' << result.gcd_reductions << ','
-        << std::setprecision(3) << result.cancelled_bits << ',' << '"'
+        << std::setprecision(3) << result.cancelled_bits << ',' << result.max_operand_bits << ','
+        << result.parallel_depth << ',' << '"'
         << result.verification_method << '"'
         << ',' << baseline_name << ',' << std::setprecision(6) << relative << ','
         << short_hash(result.decimal_prefix) << ',' << '"' << result.error << '"' << '\n';
@@ -156,11 +181,17 @@ std::string result_to_json(const ComputeResult &result, const std::string &basel
         << "\"verified\":" << (result.verified ? "true" : "false") << ','
         << "\"wall_ms\":" << std::fixed << std::setprecision(3) << result.wall_ms << ','
         << "\"cpu_ms\":" << result.cpu_ms << ','
+        << "\"split_ms\":" << result.split_ms << ','
+        << "\"finalize_ms\":" << result.finalize_ms << ','
+        << "\"format_ms\":" << result.format_ms << ','
+        << "\"verify_ms\":" << result.verify_ms << ','
         << "\"terms_or_iterations\":" << result.terms_or_iterations << ','
         << "\"estimated_digits_per_term\":" << std::setprecision(6)
         << result.estimated_digits_per_term << ','
         << "\"gcd_reductions\":" << result.gcd_reductions << ','
         << "\"cancelled_bits\":" << result.cancelled_bits << ','
+        << "\"max_operand_bits\":" << result.max_operand_bits << ','
+        << "\"parallel_depth\":" << result.parallel_depth << ','
         << "\"verification_method\":\"" << escape_json(result.verification_method) << "\","
         << "\"baseline\":\"" << escape_json(baseline_name) << "\","
         << "\"relative_wall_time\":" << relative << ','
@@ -185,13 +216,14 @@ int run_benchmark(const BenchmarkOptions &options) {
     md << "# SATO-X Benchmark Summary\n\n";
     md << "Guard digits: `" << options.guard_digits << "`\n\n";
     md << "Trials per row: `" << options.trials << "`; warmups: `" << options.warmups << "`\n\n";
-    md << "Optimization notes: shared binary splitting uses an `mpz_addmul` merge "
-          "to avoid one temporary large-integer product per internal node, folds "
-          "small 8-term leaf blocks before recursion, and Ramanujan uses "
-          "`log10(396^4 / 256)` for term-count estimation.\n\n";
-    md << "| Digits | Algorithm | Supported | Verified | Median wall ms | Min | Max | Stddev | Terms/iterations | GCD reductions | Cancelled bits | "
+    md << "Optimization notes: shared binary splitting uses bounded parallel subtree "
+          "evaluation, an `mpz_addmul` merge to avoid one temporary large-integer "
+          "product per internal node, small 8-term leaf blocks before recursion, "
+          "and `log10(396^4 / 256)` for Ramanujan term-count estimation. Phase "
+          "columns expose split/finalize/format/verify bottlenecks.\n\n";
+    md << "| Digits | Algorithm | Supported | Verified | Median wall ms | Split | Finalize | Format | Verify | Terms/iterations | Max operand bits | Parallel depth | "
           "Relative to Chudnovsky | Notes |\n";
-    md << "|---:|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|\n";
+    md << "|---:|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|\n";
 
     bool first_json = true;
     std::vector<std::unique_ptr<PiAlgorithm>> algorithms = make_default_algorithms();
@@ -234,9 +266,10 @@ int run_benchmark(const BenchmarkOptions &options) {
                << (result.supported ? "yes" : "no") << " | "
                << (result.verified ? "yes" : "no") << " | " << std::fixed
                << std::setprecision(3) << stats.median_wall_ms << " | "
-               << stats.min_wall_ms << " | " << stats.max_wall_ms << " | "
-               << stats.stddev_wall_ms << " | " << result.terms_or_iterations << " | "
-               << result.gcd_reductions << " | " << result.cancelled_bits << " | "
+               << stats.median_split_ms << " | " << stats.median_finalize_ms << " | "
+               << stats.median_format_ms << " | " << stats.median_verify_ms << " | "
+               << result.terms_or_iterations << " | " << result.max_operand_bits << " | "
+               << result.parallel_depth << " | "
                << std::setprecision(3) << relative
                << " | " << (result.error.empty() ? "" : result.error) << " |\n";
         }

@@ -61,11 +61,18 @@ class RamanujanAlgorithm final : public PiAlgorithm {
 
         HypergeometricBsResult node;
         BinarySplittingStats bs_stats{};
-        binary_split_hypergeometric(ramanujan_spec(), 0, terms, node, &bs_stats);
+        const unsigned int parallel_depth = recommended_parallel_depth(terms);
+        const HypergeometricBsSpec spec = ramanujan_spec();
+        const Timer split_timer;
+        binary_split_hypergeometric(spec, 0, terms, node, &bs_stats, parallel_depth);
+        result.split_ms = split_timer.wall_ms();
         result.gcd_reductions = bs_stats.gcd_reductions;
         result.cancelled_bits = bs_stats.cancelled_bits;
+        result.max_operand_bits = bs_stats.max_operand_bits;
+        result.parallel_depth = bs_stats.parallel_depth;
 
         const int precision_bits = bits_for_decimal_digits(decimal_digits, effective_guard_digits);
+        const Timer finalize_timer;
         mpfr_t q;
         mpfr_t t;
         mpfr_t denominator;
@@ -81,12 +88,17 @@ class RamanujanAlgorithm final : public PiAlgorithm {
         mpfr_mul_ui(denominator, sqrt2, 2ul, MPFR_RNDN);
         mpfr_mul(denominator, denominator, t, MPFR_RNDN);
         mpfr_div(pi, q, denominator, MPFR_RNDN);
+        result.finalize_ms = finalize_timer.wall_ms();
 
+        const Timer format_timer;
         result.decimal_prefix = mpfr_to_decimal_prefix(pi, decimal_digits);
+        result.format_ms = format_timer.wall_ms();
         result.wall_ms = timer.wall_ms();
         result.cpu_ms = timer.cpu_ms();
+        const Timer verify_timer;
         result.verified = decimal_prefix_matches_pi(result.decimal_prefix, decimal_digits,
                                                     effective_guard_digits);
+        result.verify_ms = verify_timer.wall_ms();
         result.verification_method = "MPFR const_pi prefix";
 
         mpfr_clears(q, t, denominator, pi, sqrt2, (mpfr_ptr)nullptr);
