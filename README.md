@@ -35,8 +35,9 @@ Outputs are written to:
 ./bin/satox-bench --digits 1000,10000,100000,1000000 --guard 25 --out results
 ```
 
-Ramanujan and AGM intentionally cap at `100000` digits in v1. Chudnovsky runs
-through `1000000` digits and serves as the baseline.
+Machin and AGM intentionally cap at `100000` digits in v1. The binary-splitting
+algorithms and Borwein variants run through `1000000` digits, with Chudnovsky
+serving as the baseline to beat.
 
 Benchmark rows are repeated by default. Use `--trials` and `--warmups` to tune
 the statistics:
@@ -114,8 +115,12 @@ as a wall-time race, convergence-work animation, and verification matrix.
 ## Implemented Algorithms
 
 - `chudnovsky_bs`: Chudnovsky binary splitting baseline.
+- `chudnovsky_bs_valuation`: Chudnovsky with opt-in leaf valuation
+  cancellation to reduce operand growth.
 - `ramanujan_classic_bs`: classical Ramanujan series with binary splitting.
+- `machin_arctan`: independent Machin arctangent identity comparator.
 - `gauss_legendre_agm`: quadratic-convergent AGM comparator.
+- `borwein_cubic`: cubic-convergent Borwein comparator.
 - `borwein_quartic`: quartic-convergent Borwein-style comparator.
 
 SATO-X discovery is not yet implemented as a proof-producing formula search
@@ -136,13 +141,16 @@ algorithm files keep only the formula constants and final normalization.
 
 The shared binary-splitting path now uses bounded parallel subtree evaluation,
 an `mpz_addmul` merge that avoids one temporary large-integer product per
-internal node, and small 8-term leaf blocks before recursing. Ramanujan uses the
-actual asymptotic convergence rate `log10(396^4 / 256)` instead of the rounded
-`8.0`, which lets the harness verify it at `1000000` digits without
-under-counting required terms. The benchmark CSV also reports phase timings for
-split, finalization, decimal formatting, and verification, plus max operand bits
-and selected parallel depth. Current regenerated results still show Chudnovsky
-as the verified winner at `10000`, `100000`, and `1000000` digits.
+internal node, small 8-term leaf blocks before recursing, and an experimental
+Chudnovsky valuation-cancellation variant that trims common factors at leaf
+construction. Ramanujan uses the actual asymptotic convergence rate
+`log10(396^4 / 256)` instead of the rounded `8.0`, which lets the harness
+verify it at `1000000` digits without under-counting required terms. The
+benchmark CSV also reports phase timings for split, finalization, decimal
+formatting, and verification, plus max operand bits and selected parallel
+depth. Current regenerated results show the valuation-cancelled Chudnovsky
+variant slightly ahead at `1000000` digits on this machine, while the other
+verified methods remain important correctness and convergence comparators.
 
 The compiler supports opt-in `gcd_cancellation=yes`, which safely divides only
 common factors shared by `P`, `Q`, and `T`. It is disabled for the current

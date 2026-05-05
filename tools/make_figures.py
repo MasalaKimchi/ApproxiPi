@@ -13,17 +13,23 @@ from typing import Callable, Iterable
 
 PALETTE = {
     "chudnovsky_bs": "#2155d9",
+    "chudnovsky_bs_valuation": "#0891b2",
     "ramanujan_classic_bs": "#c2410c",
     "ramanujan_classic": "#c2410c",
+    "machin_arctan": "#b45309",
     "gauss_legendre_agm": "#15803d",
+    "borwein_cubic": "#9333ea",
     "borwein_quartic": "#7c3aed",
 }
 
 LABELS = {
     "chudnovsky_bs": "Chudnovsky BS",
+    "chudnovsky_bs_valuation": "Chudnovsky valuation",
     "ramanujan_classic_bs": "Ramanujan BS",
     "ramanujan_classic": "Ramanujan",
+    "machin_arctan": "Machin arctan",
     "gauss_legendre_agm": "AGM",
+    "borwein_cubic": "Borwein cubic",
     "borwein_quartic": "Borwein quartic",
 }
 
@@ -190,12 +196,13 @@ def parts_to_string(parts: Iterable[str]) -> str:
 
 
 def verification_matrix(rows: list[dict[str, object]], output: Path) -> None:
-    width, height = 960, 460
     algorithms = sorted({str(r["algorithm"]) for r in rows})
     digits = sorted({int(r["digits"]) for r in rows})
     lookup = {(str(r["algorithm"]), int(r["digits"])): r for r in rows}
     x0, y0 = 230, 96
-    cell_w, cell_h = 128, 54
+    cell_w, cell_h = 128, 50
+    width = 960
+    height = max(460, y0 + len(algorithms) * cell_h + 88)
     parts = [
         f'<rect width="{width}" height="{height}" fill="#fff"/>',
         '<text class="title" x="40" y="38">Verification matrix</text>',

@@ -11,10 +11,12 @@ SRC = \
 	src/bbp.cpp \
 	src/benchmark.cpp \
 	src/borwein.cpp \
+	src/borwein_cubic.cpp \
 	src/candidate.cpp \
 	src/chudnovsky.cpp \
 	src/formula_spec.cpp \
 	src/format.cpp \
+	src/machin.cpp \
 	src/ramanujan.cpp \
 	src/verification.cpp
 

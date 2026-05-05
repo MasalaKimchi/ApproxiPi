@@ -54,6 +54,24 @@ void reduce_common_pqt(HypergeometricBsResult &node, BinarySplittingStats *stats
     mpz_clear(g);
 }
 
+void reduce_common_pq_leaf(HypergeometricBsResult &node, BinarySplittingStats *stats) {
+    mpz_t g;
+    mpz_init(g);
+    mpz_gcd(g, node.p, node.q);
+
+    if (mpz_cmp_ui(g, 1ul) > 0) {
+        if (stats != nullptr) {
+            ++stats->gcd_reductions;
+            stats->cancelled_bits += static_cast<double>(mpz_sizeinbase(g, 2));
+        }
+        mpz_divexact(node.p, node.p, g);
+        mpz_divexact(node.q, node.q, g);
+        mpz_divexact(node.t, node.t, g);
+    }
+
+    mpz_clear(g);
+}
+
 void update_max_operand_bits(const HypergeometricBsResult &node, BinarySplittingStats *stats) {
     if (stats == nullptr) {
         return;
@@ -100,6 +118,9 @@ void set_leaf(const HypergeometricBsSpec &spec, unsigned long n, HypergeometricB
     }
     if (spec.alternating && (n & 1ul) != 0) {
         mpz_neg(out.t, out.t);
+    }
+    if (spec.leaf_pq_cancellation) {
+        reduce_common_pq_leaf(out, stats);
     }
     if (spec.gcd_cancellation) {
         reduce_common_pqt(out, stats);

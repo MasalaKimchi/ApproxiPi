@@ -110,9 +110,9 @@
     }
 
     .stage {
-      min-height: 650px;
+      min-height: 760px;
       display: grid;
-      grid-template-rows: auto auto minmax(420px, 1fr) auto;
+      grid-template-rows: auto auto minmax(560px, 1fr) auto;
     }
 
     .toolbar {
@@ -231,7 +231,7 @@
 
     .canvas-wrap {
       position: relative;
-      min-height: 420px;
+      min-height: 560px;
       margin: 8px 16px 12px;
       border: 1px solid var(--line);
       border-radius: 8px;
@@ -245,7 +245,7 @@
     canvas {
       width: 100%;
       height: 100%;
-      min-height: 420px;
+      min-height: 560px;
       display: block;
     }
 
@@ -424,6 +424,12 @@
 
       .stage {
         min-height: auto;
+        grid-template-rows: auto auto minmax(500px, 1fr) auto;
+      }
+
+      .canvas-wrap,
+      canvas {
+        min-height: 500px;
       }
 
       .stage-copy,
@@ -462,7 +468,7 @@
       </div>
       <div class="source-stack">
         <div class="source">Data: results/benchmark.csv</div>
-        <div class="source optimized">Optimized: parallel BS, phase timing, addmul merge, 8-term leaf blocks</div>
+        <div class="source optimized">Optimized: parallel BS, valuation cancellation, addmul merge, phase timing</div>
       </div>
     </header>
 
@@ -525,28 +531,43 @@
   <script>
     const algorithms = [
       { id: "chudnovsky_bs", label: "Chudnovsky BS", color: "#2155d9" },
+      { id: "chudnovsky_bs_valuation", label: "Chudnovsky valuation", color: "#0891b2" },
       { id: "ramanujan_classic_bs", label: "Ramanujan BS", color: "#c2410c" },
+      { id: "machin_arctan", label: "Machin arctan", color: "#b45309" },
       { id: "gauss_legendre_agm", label: "AGM", color: "#15803d" },
+      { id: "borwein_cubic", label: "Borwein cubic", color: "#9333ea" },
       { id: "borwein_quartic", label: "Borwein quartic", color: "#7c3aed" }
     ];
 
     const rows = [
-      { algorithm: "chudnovsky_bs", digits: 1000, supported: true, verified: true, wall: 0.059, min: 0.054, max: 0.149, stddev: 0.053, terms: 83, dpt: 14.181647, relative: 1.000000, method: "MPFR const_pi prefix", error: "" },
-      { algorithm: "ramanujan_classic_bs", digits: 1000, supported: true, verified: true, wall: 0.079, min: 0.074, max: 0.092, stddev: 0.009, terms: 153, dpt: 7.982541, relative: 1.328421, method: "MPFR const_pi prefix", error: "" },
-      { algorithm: "gauss_legendre_agm", digits: 1000, supported: true, verified: true, wall: 0.102, min: 0.095, max: 0.117, stddev: 0.011, terms: 13, dpt: 76.923077, relative: 1.716497, method: "adaptive attempted; full-precision MPFR fallback", error: "" },
-      { algorithm: "borwein_quartic", digits: 1000, supported: true, verified: true, wall: 0.138, min: 0.137, max: 0.154, stddev: 0.010, terms: 7, dpt: 142.857143, relative: 2.320000, method: "adaptive attempted; full-precision MPFR fallback", error: "" },
-      { algorithm: "chudnovsky_bs", digits: 10000, supported: true, verified: true, wall: 0.713, min: 0.678, max: 0.735, stddev: 0.029, terms: 717, dpt: 14.181647, relative: 1.000000, method: "MPFR const_pi prefix", error: "" },
-      { algorithm: "ramanujan_classic_bs", digits: 10000, supported: true, verified: true, wall: 1.162, min: 1.089, max: 1.292, stddev: 0.103, terms: 1280, dpt: 7.982541, relative: 1.629377, method: "MPFR const_pi prefix", error: "" },
-      { algorithm: "gauss_legendre_agm", digits: 10000, supported: true, verified: true, wall: 2.271, min: 2.227, max: 2.273, stddev: 0.026, terms: 16, dpt: 625.000000, relative: 3.185048, method: "adaptive attempted; full-precision MPFR fallback", error: "" },
-      { algorithm: "borwein_quartic", digits: 10000, supported: true, verified: true, wall: 2.946, min: 2.891, max: 3.007, stddev: 0.058, terms: 8, dpt: 1250.000000, relative: 4.132913, method: "adaptive attempted; full-precision MPFR fallback", error: "" },
-      { algorithm: "chudnovsky_bs", digits: 100000, supported: true, verified: true, wall: 13.352, min: 13.216, max: 13.828, stddev: 0.321, terms: 7064, dpt: 14.181647, relative: 1.000000, method: "MPFR const_pi prefix", error: "" },
-      { algorithm: "ramanujan_classic_bs", digits: 100000, supported: true, verified: true, wall: 16.285, min: 16.232, max: 16.799, stddev: 0.313, terms: 12555, dpt: 7.982541, relative: 1.219658, method: "MPFR const_pi prefix", error: "" },
-      { algorithm: "gauss_legendre_agm", digits: 100000, supported: true, verified: true, wall: 56.177, min: 54.437, max: 56.297, stddev: 1.041, terms: 19, dpt: 5263.157895, relative: 4.207375, method: "adaptive attempted; full-precision MPFR fallback", error: "" },
-      { algorithm: "borwein_quartic", digits: 100000, supported: true, verified: true, wall: 83.308, min: 81.102, max: 93.937, stddev: 6.863, terms: 10, dpt: 10000.000000, relative: 6.239346, method: "adaptive attempted; full-precision MPFR fallback", error: "" },
-      { algorithm: "chudnovsky_bs", digits: 1000000, supported: true, verified: true, wall: 145.798, min: 144.857, max: 166.160, stddev: 12.037, terms: 70526, dpt: 14.181647, relative: 1.000000, method: "MPFR const_pi prefix", error: "" },
-      { algorithm: "ramanujan_classic_bs", digits: 1000000, supported: true, verified: true, wall: 210.999, min: 210.311, max: 211.091, stddev: 0.426, terms: 125301, dpt: 7.982541, relative: 1.447201, method: "MPFR const_pi prefix", error: "" },
+      { algorithm: "chudnovsky_bs", digits: 1000, supported: true, verified: true, wall: 0.048, min: 0.037, max: 1.541, stddev: 0.865, terms: 83, dpt: 14.181647, relative: 1.000000, method: "MPFR const_pi prefix", error: "" },
+      { algorithm: "chudnovsky_bs_valuation", digits: 1000, supported: true, verified: true, wall: 0.043, min: 0.037, max: 0.052, stddev: 0.008, terms: 83, dpt: 14.181647, relative: 0.892354, method: "MPFR const_pi prefix", error: "" },
+      { algorithm: "ramanujan_classic_bs", digits: 1000, supported: true, verified: true, wall: 0.055, min: 0.052, max: 0.062, stddev: 0.005, terms: 153, dpt: 7.982541, relative: 1.149312, method: "MPFR const_pi prefix", error: "" },
+      { algorithm: "machin_arctan", digits: 1000, supported: true, verified: true, wall: 0.184, min: 0.180, max: 0.264, stddev: 0.047, terms: 825, dpt: 1.397940, relative: 3.832458, method: "Machin 16 atan(1/5) - 4 atan(1/239)", error: "" },
+      { algorithm: "gauss_legendre_agm", digits: 1000, supported: true, verified: true, wall: 0.076, min: 0.074, max: 0.084, stddev: 0.005, terms: 13, dpt: 76.923077, relative: 1.580729, method: "adaptive attempted; full-precision MPFR fallback", error: "" },
+      { algorithm: "borwein_cubic", digits: 1000, supported: true, verified: true, wall: 0.098, min: 0.096, max: 0.127, stddev: 0.018, terms: 13, dpt: 76.923077, relative: 2.038187, method: "full-precision MPFR const_pi prefix", error: "" },
+      { algorithm: "borwein_quartic", digits: 1000, supported: true, verified: true, wall: 0.109, min: 0.108, max: 0.117, stddev: 0.005, terms: 7, dpt: 142.857143, relative: 2.270833, method: "adaptive attempted; full-precision MPFR fallback", error: "" },
+      { algorithm: "chudnovsky_bs", digits: 10000, supported: true, verified: true, wall: 0.668, min: 0.603, max: 1.070, stddev: 0.253, terms: 717, dpt: 14.181647, relative: 1.000000, method: "MPFR const_pi prefix", error: "" },
+      { algorithm: "chudnovsky_bs_valuation", digits: 10000, supported: true, verified: true, wall: 0.684, min: 0.625, max: 1.178, stddev: 0.303, terms: 717, dpt: 14.181647, relative: 1.024066, method: "MPFR const_pi prefix", error: "" },
+      { algorithm: "ramanujan_classic_bs", digits: 10000, supported: true, verified: true, wall: 0.935, min: 0.912, max: 1.001, stddev: 0.046, terms: 1280, dpt: 7.982541, relative: 1.399339, method: "MPFR const_pi prefix", error: "" },
+      { algorithm: "machin_arctan", digits: 10000, supported: true, verified: true, wall: 8.151, min: 7.463, max: 8.362, stddev: 0.470, terms: 7263, dpt: 1.397940, relative: 12.196453, method: "Machin 16 atan(1/5) - 4 atan(1/239)", error: "" },
+      { algorithm: "gauss_legendre_agm", digits: 10000, supported: true, verified: true, wall: 1.984, min: 1.902, max: 2.509, stddev: 0.329, terms: 16, dpt: 625.000000, relative: 2.969386, method: "adaptive attempted; full-precision MPFR fallback", error: "" },
+      { algorithm: "borwein_cubic", digits: 10000, supported: true, verified: true, wall: 2.884, min: 2.711, max: 3.885, stddev: 0.634, terms: 15, dpt: 666.666667, relative: 4.315542, method: "full-precision MPFR const_pi prefix", error: "" },
+      { algorithm: "borwein_quartic", digits: 10000, supported: true, verified: true, wall: 2.900, min: 2.824, max: 3.409, stddev: 0.318, terms: 8, dpt: 1250.000000, relative: 4.338984, method: "adaptive attempted; full-precision MPFR fallback", error: "" },
+      { algorithm: "chudnovsky_bs", digits: 100000, supported: true, verified: true, wall: 17.858, min: 16.723, max: 18.004, stddev: 0.701, terms: 7064, dpt: 14.181647, relative: 1.000000, method: "MPFR const_pi prefix", error: "" },
+      { algorithm: "chudnovsky_bs_valuation", digits: 100000, supported: true, verified: true, wall: 16.361, min: 15.733, max: 17.497, stddev: 0.894, terms: 7064, dpt: 14.181647, relative: 0.916145, method: "MPFR const_pi prefix", error: "" },
+      { algorithm: "ramanujan_classic_bs", digits: 100000, supported: true, verified: true, wall: 19.733, min: 19.210, max: 20.829, stddev: 0.826, terms: 12555, dpt: 7.982541, relative: 1.104986, method: "MPFR const_pi prefix", error: "" },
+      { algorithm: "machin_arctan", digits: 100000, supported: true, verified: true, wall: 214.279, min: 210.378, max: 221.632, stddev: 5.714, terms: 71644, dpt: 1.397940, relative: 11.998871, method: "Machin 16 atan(1/5) - 4 atan(1/239)", error: "" },
+      { algorithm: "gauss_legendre_agm", digits: 100000, supported: true, verified: true, wall: 63.550, min: 61.216, max: 64.333, stddev: 1.621, terms: 19, dpt: 5263.157895, relative: 3.558583, method: "adaptive attempted; full-precision MPFR fallback", error: "" },
+      { algorithm: "borwein_cubic", digits: 100000, supported: true, verified: true, wall: 86.573, min: 83.781, max: 86.912, stddev: 1.718, terms: 17, dpt: 5882.352941, relative: 4.847783, method: "full-precision MPFR const_pi prefix", error: "" },
+      { algorithm: "borwein_quartic", digits: 100000, supported: true, verified: true, wall: 96.679, min: 94.208, max: 98.721, stddev: 2.260, terms: 10, dpt: 10000.000000, relative: 5.413657, method: "adaptive attempted; full-precision MPFR fallback", error: "" },
+      { algorithm: "chudnovsky_bs", digits: 1000000, supported: true, verified: true, wall: 171.897, min: 168.861, max: 183.961, stddev: 7.987, terms: 70526, dpt: 14.181647, relative: 1.000000, method: "MPFR const_pi prefix", error: "" },
+      { algorithm: "chudnovsky_bs_valuation", digits: 1000000, supported: true, verified: true, wall: 170.637, min: 167.689, max: 173.310, stddev: 2.811, terms: 70526, dpt: 14.181647, relative: 0.992671, method: "MPFR const_pi prefix", error: "" },
+      { algorithm: "ramanujan_classic_bs", digits: 1000000, supported: true, verified: true, wall: 259.269, min: 257.841, max: 261.553, stddev: 1.872, terms: 125301, dpt: 7.982541, relative: 1.508279, method: "MPFR const_pi prefix", error: "" },
+      { algorithm: "machin_arctan", digits: 1000000, supported: false, verified: false, wall: 0.000, min: 0.000, max: 0.000, stddev: 0.000, terms: 0, dpt: 1.397940, relative: 0.000000, method: "", error: "requested precision exceeds algorithm max_digits" },
       { algorithm: "gauss_legendre_agm", digits: 1000000, supported: false, verified: false, wall: 0.000, min: 0.000, max: 0.000, stddev: 0.000, terms: 0, dpt: 0.000000, relative: 0.000000, method: "", error: "requested precision exceeds algorithm max_digits" },
-      { algorithm: "borwein_quartic", digits: 1000000, supported: true, verified: true, wall: 1408.448, min: 1405.600, max: 1474.315, stddev: 38.877, terms: 11, dpt: 90909.090909, relative: 9.660289, method: "adaptive attempted; full-precision MPFR fallback", error: "" }
+      { algorithm: "borwein_cubic", digits: 1000000, supported: true, verified: true, wall: 1312.290, min: 1298.481, max: 1316.790, stddev: 9.541, terms: 19, dpt: 52631.578947, relative: 7.634158, method: "full-precision MPFR const_pi prefix", error: "" },
+      { algorithm: "borwein_quartic", digits: 1000000, supported: true, verified: true, wall: 1641.934, min: 1639.663, max: 1642.983, stddev: 1.697, terms: 11, dpt: 90909.090909, relative: 9.551835, method: "adaptive attempted; full-precision MPFR fallback", error: "" }
     ];
 
     const byId = Object.fromEntries(algorithms.map((algorithm) => [algorithm.id, algorithm]));
@@ -786,8 +807,8 @@
       const right = width - clamp(width * 0.06, 24, 58);
       const axisY = 72;
       const top = 108;
-      const laneGap = Math.min(78, (height - 150) / algorithms.length);
-      const laneHeight = Math.min(36, laneGap * 0.46);
+      const laneGap = Math.min(78, (height - 150) / selected.length);
+      const laneHeight = clamp(laneGap * 0.46, 22, 36);
       const raceProgress = easeOutCubic(state.progress);
       const fastest = fastestRow();
 
@@ -811,7 +832,7 @@
         ctx.strokeStyle = "#c9d3df";
         ctx.beginPath();
         ctx.moveTo(x, axisY + 8);
-        ctx.lineTo(x, top + laneGap * algorithms.length - 16);
+        ctx.lineTo(x, top + laneGap * selected.length - 16);
         ctx.stroke();
         ctx.fillStyle = "#596579";
         ctx.font = "11px system-ui";
@@ -912,8 +933,8 @@
       const left = labelWidth;
       const chartRight = width - clamp(width * 0.08, 28, 72);
       const top = 96;
-      const barGap = Math.min(76, (height - 136) / algorithms.length);
-      const barHeight = Math.min(34, barGap * 0.44);
+      const barGap = Math.min(76, (height - 136) / selected.length);
+      const barHeight = clamp(barGap * 0.44, 21, 34);
       const progress = easeOutCubic(state.progress);
 
       ctx.fillStyle = "#172033";
@@ -985,7 +1006,7 @@
       const left = clamp(width * 0.24, 150, 210);
       const top = 88;
       const cellW = Math.min(150, (width - left - 36) / digits.length);
-      const cellH = Math.min(72, (height - top - 52) / algorithms.length);
+      const cellH = clamp((height - top - 52) / algorithms.length, 44, 72);
       const pulse = 0.8 + Math.sin(state.progress * Math.PI * 4) * 0.2;
       let verifiedCount = 0;
 

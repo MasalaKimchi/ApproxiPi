@@ -19,8 +19,11 @@ namespace satox {
 std::vector<std::unique_ptr<PiAlgorithm>> make_default_algorithms() {
     std::vector<std::unique_ptr<PiAlgorithm>> algorithms;
     algorithms.push_back(make_chudnovsky_algorithm());
+    algorithms.push_back(make_chudnovsky_valuation_algorithm());
     algorithms.push_back(make_ramanujan_algorithm());
+    algorithms.push_back(make_machin_algorithm());
     algorithms.push_back(make_agm_algorithm());
+    algorithms.push_back(make_borwein_cubic_algorithm());
     algorithms.push_back(make_borwein_quartic_algorithm());
     return algorithms;
 }
@@ -219,7 +222,8 @@ int run_benchmark(const BenchmarkOptions &options) {
     md << "Optimization notes: shared binary splitting uses bounded parallel subtree "
           "evaluation, an `mpz_addmul` merge to avoid one temporary large-integer "
           "product per internal node, small 8-term leaf blocks before recursion, "
-          "and `log10(396^4 / 256)` for Ramanujan term-count estimation. Phase "
+          "opt-in leaf valuation cancellation, and `log10(396^4 / 256)` for "
+          "Ramanujan term-count estimation. Phase "
           "columns expose split/finalize/format/verify bottlenecks.\n\n";
     md << "| Digits | Algorithm | Supported | Verified | Median wall ms | Split | Finalize | Format | Verify | Terms/iterations | Max operand bits | Parallel depth | "
           "Relative to Chudnovsky | Notes |\n";

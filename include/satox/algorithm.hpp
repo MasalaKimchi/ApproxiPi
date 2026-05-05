@@ -50,8 +50,11 @@ class PiAlgorithm {
 std::vector<std::unique_ptr<PiAlgorithm>> make_default_algorithms();
 
 std::unique_ptr<PiAlgorithm> make_chudnovsky_algorithm();
+std::unique_ptr<PiAlgorithm> make_chudnovsky_valuation_algorithm();
 std::unique_ptr<PiAlgorithm> make_ramanujan_algorithm();
+std::unique_ptr<PiAlgorithm> make_machin_algorithm();
 std::unique_ptr<PiAlgorithm> make_agm_algorithm();
+std::unique_ptr<PiAlgorithm> make_borwein_cubic_algorithm();
 std::unique_ptr<PiAlgorithm> make_borwein_quartic_algorithm();
 
 } // namespace satox

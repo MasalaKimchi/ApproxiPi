@@ -24,6 +24,7 @@ struct HypergeometricBsSpec {
     bool unit_first_q = false;
     bool leaf_t_uses_q = false;
     bool gcd_cancellation = false;
+    bool leaf_pq_cancellation = false;
 };
 
 struct HypergeometricBsResult {

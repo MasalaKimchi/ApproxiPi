@@ -17,7 +17,7 @@ namespace {
 
 constexpr double kChudnovskyDigitsPerTerm = 14.181647462725477;
 
-HypergeometricBsSpec chudnovsky_spec() {
+HypergeometricBsSpec chudnovsky_spec(bool leaf_pq_cancellation) {
     HypergeometricBsSpec spec;
     spec.id = "chudnovsky_bs";
     spec.p_factors = {{6, -5}, {2, -1}, {6, -1}};
@@ -29,12 +29,21 @@ HypergeometricBsSpec chudnovsky_spec() {
     spec.unit_first_p = true;
     spec.unit_first_q = true;
     spec.leaf_t_uses_q = false;
+    spec.leaf_pq_cancellation = leaf_pq_cancellation;
     return spec;
 }
 
 class ChudnovskyAlgorithm final : public PiAlgorithm {
   public:
+    explicit ChudnovskyAlgorithm(bool leaf_pq_cancellation = false)
+        : leaf_pq_cancellation_(leaf_pq_cancellation) {}
+
     AlgorithmMetadata metadata() const override {
+        if (leaf_pq_cancellation_) {
+            return {"chudnovsky_bs_valuation",
+                    "Chudnovsky binary splitting with leaf valuation cancellation", 1,
+                    1000000, true, false};
+        }
         return {"chudnovsky_bs", "Chudnovsky binary splitting", 1, 1000000, true, false};
     }
 
@@ -65,7 +74,7 @@ class ChudnovskyAlgorithm final : public PiAlgorithm {
         HypergeometricBsResult node;
         BinarySplittingStats bs_stats{};
         const unsigned int parallel_depth = recommended_parallel_depth(terms);
-        const HypergeometricBsSpec spec = chudnovsky_spec();
+        const HypergeometricBsSpec spec = chudnovsky_spec(leaf_pq_cancellation_);
         const Timer split_timer;
         binary_split_hypergeometric(spec, 0, terms, node, &bs_stats, parallel_depth);
         result.split_ms = split_timer.wall_ms();
@@ -110,12 +119,19 @@ class ChudnovskyAlgorithm final : public PiAlgorithm {
         mpfr_clear(pi);
         return result;
     }
+
+  private:
+    bool leaf_pq_cancellation_;
 };
 
 } // namespace
 
 std::unique_ptr<PiAlgorithm> make_chudnovsky_algorithm() {
     return std::make_unique<ChudnovskyAlgorithm>();
+}
+
+std::unique_ptr<PiAlgorithm> make_chudnovsky_valuation_algorithm() {
+    return std::make_unique<ChudnovskyAlgorithm>(true);
 }
 
 } // namespace satox
