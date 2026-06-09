@@ -145,6 +145,10 @@ An interactive animation is available at
 `docs/animations/algorithm-comparison.html`. It compares the same benchmark data
 as a wall-time race, convergence-work animation, and verification matrix.
 
+For per-method formulae, convergence rates, and benchmark interpretation, see
+[`docs/methods-comparison.md`](docs/methods-comparison.md) and the annotated
+figure gallery at [`docs/figures/index.md`](docs/figures/index.md).
+
 ## Implemented Algorithms
 
 - `chudnovsky_bs`: Chudnovsky binary splitting baseline.

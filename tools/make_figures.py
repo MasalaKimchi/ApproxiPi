@@ -90,15 +90,63 @@ def svg_document(width: int, height: int, title: str, desc: str, body: str) -> s
         "<style>"
         "text{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}"
         ".title{font-size:22px;font-weight:700;fill:#111827}"
-        ".subtitle{font-size:12px;fill:#64748b}"
-        ".axis{stroke:#1f2937;stroke-width:1.4}"
-        ".grid{stroke:#d7dde8;stroke-width:1}"
-        ".tick{font-size:11px;fill:#64748b}"
-        ".label{font-size:12px;fill:#111827}"
-        ".legend{font-size:12px;fill:#111827}"
+        ".subtitle{font-size:13px;fill:#64748b}"
+        ".axis{stroke:#1f2937;stroke-width:1.5}"
+        ".grid{stroke:#e2e8f0;stroke-width:1}"
+        ".tick{font-size:12px;fill:#64748b}"
+        ".label{font-size:13px;font-weight:600;fill:#111827}"
+        ".legend{font-size:13px;fill:#111827}"
+        ".legend-box{fill:#f8fafc;stroke:#e2e8f0;stroke-width:1}"
+        ".refline{stroke:#94a3b8;stroke-width:1.5;stroke-dasharray:6 4}"
         "</style>"
         f"{body}</svg>"
     )
+
+
+LEGEND_COLS = 3
+LEGEND_ROW_HEIGHT = 24
+LEGEND_PAD = 20
+
+
+def legend_height(count: int, cols: int = LEGEND_COLS) -> int:
+    if count <= 0:
+        return 0
+    rows = math.ceil(count / cols)
+    return LEGEND_PAD * 2 + rows * LEGEND_ROW_HEIGHT
+
+
+def render_legend(
+    algorithms: list[str],
+    x0: float,
+    y0: float,
+    width: float,
+    cols: int = LEGEND_COLS,
+) -> list[str]:
+    """Multi-column legend below the plot area."""
+    if not algorithms:
+        return []
+    rows = math.ceil(len(algorithms) / cols)
+    box_h = LEGEND_PAD * 2 + rows * LEGEND_ROW_HEIGHT
+    col_w = width / cols
+    parts = [
+        f'<rect class="legend-box" x="{fmt(x0)}" y="{fmt(y0)}" '
+        f'width="{fmt(width)}" height="{fmt(box_h)}" rx="8"/>',
+    ]
+    for index, algorithm in enumerate(algorithms):
+        col = index % cols
+        row = index // cols
+        x = x0 + 16 + col * col_w
+        y = y0 + LEGEND_PAD + row * LEGEND_ROW_HEIGHT + 4
+        color = PALETTE.get(algorithm, "#6d28d9")
+        parts.append(f'<line x1="{fmt(x)}" y1="{fmt(y - 1)}" x2="{fmt(x + 22)}" y2="{fmt(y - 1)}" '
+                     f'stroke="{color}" stroke-width="3" stroke-linecap="round"/>')
+        parts.append(f'<circle cx="{fmt(x + 11)}" cy="{fmt(y - 1)}" r="4.5" fill="{color}" '
+                     f'stroke="#fff" stroke-width="1.5"/>')
+        parts.append(
+            f'<text class="legend" x="{fmt(x + 30)}" y="{fmt(y + 4)}">'
+            f"{html.escape(LABELS.get(algorithm, algorithm))}</text>"
+        )
+    return parts
 
 
 def log_scale(values: Iterable[float], lo_px: float, hi_px: float) -> Callable[[float], float]:
@@ -138,14 +186,29 @@ def line_chart(
     ylabel: str,
     output: Path,
     y_log: bool,
+    reference_y: float | None = None,
 ) -> None:
-    plot = {"x0": 82, "y0": 74, "x1": 850, "y1": 430}
-    width, height = 960, 540
+    margin = {"left": 82, "right": 40, "top": 74, "bottom": 56}
+    plot_w = 880
+    plot_h = 380
+    plot = {
+        "x0": margin["left"],
+        "y0": margin["top"],
+        "x1": margin["left"] + plot_w,
+        "y1": margin["top"] + plot_h,
+    }
     usable = [
         r
         for r in rows
         if r["supported"] and r["verified"] and float(r[metric]) > 0 and int(r["digits"]) > 0
     ]
+    algorithms = sorted({str(r["algorithm"]) for r in usable})
+    legend_y = plot["y1"] + margin["bottom"] + 8
+    legend_w = plot_w
+    total_legend_h = legend_height(len(algorithms))
+    width = margin["left"] + plot_w + margin["right"]
+    height = int(legend_y + total_legend_h + 16)
+
     xscale = log_scale([float(r["digits"]) for r in usable], plot["x0"], plot["x1"])
     if y_log:
         y_forward = log_scale([float(r[metric]) for r in usable], plot["y1"], plot["y0"])
@@ -162,8 +225,13 @@ def line_chart(
     for power in range(int(x_lo), int(x_hi) + 1):
         value = 10**power
         x = xscale(value)
-        parts.append(f'<line class="grid" x1="{fmt(x)}" y1="{plot["y0"]}" x2="{fmt(x)}" y2="{plot["y1"]}"/>')
-        parts.append(f'<text class="tick" x="{fmt(x)}" y="454" text-anchor="middle">1e{power}</text>')
+        parts.append(
+            f'<line class="grid" x1="{fmt(x)}" y1="{plot["y0"]}" x2="{fmt(x)}" y2="{plot["y1"]}"/>'
+        )
+        label = f"{10**power:,}" if power >= 3 else str(10**power)
+        parts.append(
+            f'<text class="tick" x="{fmt(x)}" y="{fmt(plot["y1"] + 22)}" text-anchor="middle">{label}</text>'
+        )
 
     y_lo, y_hi = y_forward.domain  # type: ignore[attr-defined]
     if y_log:
@@ -174,16 +242,38 @@ def line_chart(
     for value in y_ticks:
         y = y_forward(value if value > 0 else 0)
         label = f"1e{int(math.log10(value))}" if y_log and value > 0 else fmt(value)
-        parts.append(f'<line class="grid" x1="{plot["x0"]}" y1="{fmt(y)}" x2="{plot["x1"]}" y2="{fmt(y)}"/>')
-        parts.append(f'<text class="tick" x="72" y="{fmt(y + 4)}" text-anchor="end">{label}</text>')
+        parts.append(
+            f'<line class="grid" x1="{plot["x0"]}" y1="{fmt(y)}" x2="{plot["x1"]}" y2="{fmt(y)}"/>'
+        )
+        parts.append(f'<text class="tick" x="{plot["x0"] - 10}" y="{fmt(y + 4)}" text-anchor="end">{label}</text>')
 
-    parts.append(f'<line class="axis" x1="{plot["x0"]}" y1="{plot["y1"]}" x2="{plot["x1"]}" y2="{plot["y1"]}"/>')
-    parts.append(f'<line class="axis" x1="{plot["x0"]}" y1="{plot["y0"]}" x2="{plot["x0"]}" y2="{plot["y1"]}"/>')
-    parts.append('<text class="label" x="466" y="494" text-anchor="middle">Decimal digits</text>')
-    parts.append(f'<text class="label" transform="translate(22 254) rotate(-90)" text-anchor="middle">{html.escape(ylabel)}</text>')
+    if reference_y is not None and not y_log:
+        ref_y = y_forward(reference_y)
+        parts.append(
+            f'<line class="refline" x1="{plot["x0"]}" y1="{fmt(ref_y)}" '
+            f'x2="{plot["x1"]}" y2="{fmt(ref_y)}"/>'
+        )
+        parts.append(
+            f'<text class="tick" x="{plot["x1"] + 6}" y="{fmt(ref_y + 4)}" '
+            f'text-anchor="start">baseline (1.0)</text>'
+        )
 
-    algorithms = sorted({str(r["algorithm"]) for r in usable})
-    for index, algorithm in enumerate(algorithms):
+    parts.append(
+        f'<line class="axis" x1="{plot["x0"]}" y1="{plot["y1"]}" x2="{plot["x1"]}" y2="{plot["y1"]}"/>'
+    )
+    parts.append(
+        f'<line class="axis" x1="{plot["x0"]}" y1="{plot["y0"]}" x2="{plot["x0"]}" y2="{plot["y1"]}"/>'
+    )
+    parts.append(
+        f'<text class="label" x="{fmt(plot["x0"] + plot_w / 2)}" y="{fmt(plot["y1"] + 44)}" '
+        f'text-anchor="middle">Decimal digits</text>'
+    )
+    parts.append(
+        f'<text class="label" transform="translate(24 {fmt(plot["y0"] + plot_h / 2)}) rotate(-90)" '
+        f'text-anchor="middle">{html.escape(ylabel)}</text>'
+    )
+
+    for algorithm in algorithms:
         series = sorted([r for r in usable if r["algorithm"] == algorithm], key=lambda r: int(r["digits"]))
         color = PALETTE.get(algorithm, "#6d28d9")
         points = [(xscale(float(r["digits"])), y_forward(float(r[metric]))) for r in series]
@@ -192,14 +282,17 @@ def line_chart(
                 ("M" if i == 0 else "L") + f"{fmt(x)} {fmt(y)}"
                 for i, (x, y) in enumerate(points)
             )
-            parts.append(f'<path d="{path_data}" fill="none" stroke="{color}" stroke-width="2.8" stroke-linejoin="round" stroke-linecap="round"/>')
+            parts.append(
+                f'<path d="{path_data}" fill="none" stroke="{color}" stroke-width="3" '
+                f'stroke-linejoin="round" stroke-linecap="round"/>'
+            )
         for x, y in points:
-            parts.append(f'<circle cx="{fmt(x)}" cy="{fmt(y)}" r="4.2" fill="{color}" stroke="#fff" stroke-width="1.4"/>')
-        lx = 680
-        ly = 96 + index * 22
-        parts.append(f'<circle cx="{lx}" cy="{ly - 4}" r="4" fill="{color}"/>')
-        parts.append(f'<text class="legend" x="{lx + 12}" y="{ly}">{html.escape(LABELS.get(algorithm, algorithm))}</text>')
+            parts.append(
+                f'<circle cx="{fmt(x)}" cy="{fmt(y)}" r="5" fill="{color}" '
+                f'stroke="#fff" stroke-width="1.8"/>'
+            )
 
+    parts.extend(render_legend(algorithms, plot["x0"], legend_y, legend_w))
     write(output, svg_document(width, height, title, subtitle, parts_to_string(parts)))
 
 
@@ -211,40 +304,55 @@ def verification_matrix(rows: list[dict[str, object]], output: Path) -> None:
     algorithms = sorted({str(r["algorithm"]) for r in rows})
     digits = sorted({int(r["digits"]) for r in rows})
     lookup = {(str(r["algorithm"]), int(r["digits"])): r for r in rows}
-    x0, y0 = 230, 96
-    cell_w, cell_h = 128, 50
-    width = 960
-    height = max(460, y0 + len(algorithms) * cell_h + 88)
+    label_w = 210
+    cell_w, cell_h = 132, 44
+    x0 = label_w + 20
+    y0 = 96
+    plot_w = len(digits) * cell_w
+    width = x0 + plot_w + 40
+    legend_h = 52
+    height = y0 + len(algorithms) * cell_h + legend_h + 40
     parts = [
         f'<rect width="{width}" height="{height}" fill="#fff"/>',
         '<text class="title" x="40" y="38">Verification matrix</text>',
-        '<text class="subtitle" x="40" y="58">Green means supported and verified; gray means outside the v1 precision cap.</text>',
+        '<text class="subtitle" x="40" y="58">Green = supported and verified; gray = outside v1 precision cap; red = failed.</text>',
+        f'<text class="label" x="{fmt(x0 + plot_w / 2)}" y="84" text-anchor="middle">Decimal digits</text>',
     ]
 
     for col, digit in enumerate(digits):
         x = x0 + col * cell_w + cell_w / 2
-        parts.append(f'<text class="tick" x="{fmt(x)}" y="84" text-anchor="middle">{digit:,}</text>')
+        parts.append(f'<text class="tick" x="{fmt(x)}" y="104" text-anchor="middle">{digit:,}</text>')
 
     for row_index, algorithm in enumerate(algorithms):
-        y = y0 + row_index * cell_h
-        parts.append(f'<text class="label" x="40" y="{fmt(y + 32)}">{html.escape(LABELS.get(algorithm, algorithm))}</text>')
+        y = y0 + row_index * cell_h + 8
+        parts.append(
+            f'<text class="label" x="36" y="{fmt(y + cell_h / 2 + 4)}" '
+            f'text-anchor="end">{html.escape(LABELS.get(algorithm, algorithm))}</text>'
+        )
         for col, digit in enumerate(digits):
             r = lookup[(algorithm, digit)]
-            x = x0 + col * cell_w
+            x = x0 + col * cell_w + 6
             if r["supported"] and r["verified"]:
-                fill, label = OK, "verified"
+                fill, label = OK, "OK"
             elif not r["supported"]:
-                fill, label = SKIP, "skipped"
+                fill, label = SKIP, "skip"
             else:
-                fill, label = FAIL, "failed"
-            parts.append(f'<rect x="{fmt(x)}" y="{fmt(y)}" width="{cell_w - 10}" height="{cell_h - 10}" rx="5" fill="{fill}"/>')
-            parts.append(f'<text x="{fmt(x + (cell_w - 10) / 2)}" y="{fmt(y + 28)}" text-anchor="middle" font-size="12" font-weight="700" fill="#fff">{label}</text>')
+                fill, label = FAIL, "fail"
+            parts.append(
+                f'<rect x="{fmt(x)}" y="{fmt(y)}" width="{cell_w - 12}" height="{cell_h - 8}" '
+                f'rx="6" fill="{fill}"/>'
+            )
+            parts.append(
+                f'<text x="{fmt(x + (cell_w - 12) / 2)}" y="{fmt(y + cell_h / 2 + 1)}" '
+                f'text-anchor="middle" font-size="13" font-weight="700" fill="#fff">{label}</text>'
+            )
 
-    legend_y = y0 + len(algorithms) * cell_h + 38
+    legend_y = y0 + len(algorithms) * cell_h + 24
+    parts.append(f'<rect class="legend-box" x="36" y="{legend_y}" width="{width - 72}" height="36" rx="8"/>')
     for i, (fill, label) in enumerate(((OK, "verified"), (SKIP, "unsupported"), (FAIL, "failed"))):
-        x = 40 + i * 150
-        parts.append(f'<rect x="{x}" y="{legend_y}" width="16" height="16" rx="3" fill="{fill}"/>')
-        parts.append(f'<text class="legend" x="{x + 24}" y="{legend_y + 13}">{label}</text>')
+        x = 56 + i * 180
+        parts.append(f'<rect x="{x}" y="{legend_y + 10}" width="18" height="18" rx="4" fill="{fill}"/>')
+        parts.append(f'<text class="legend" x="{x + 28}" y="{legend_y + 24}">{label}</text>')
 
     write(
         output,
@@ -270,33 +378,44 @@ def phase_breakdown(rows: list[dict[str, object]], digits: int, output: Path) ->
     if not usable:
         return
     phases = [("split_ms", "#2155d9"), ("finalize_ms", "#dc2626"), ("format_ms", "#f59e0b")]
-    phase_names = ["series/split", "finalize", "format"]
-    x0, y0 = 230, 110
-    bar_h, gap = 30, 18
-    plot_w = 600
-    width = 960
-    height = y0 + len(usable) * (bar_h + gap) + 70
+    phase_names = ["series / split", "finalize", "format"]
+    label_w = 210
+    x0 = label_w + 20
+    bar_h, gap = 32, 14
+    plot_w = 620
+    legend_h = 48
+    width = x0 + plot_w + 120
+    height = 110 + len(usable) * (bar_h + gap) + legend_h + 24
     max_wall = max(float(r["wall_ms"]) for r in usable)
 
     parts = [
         f'<rect width="{width}" height="{height}" fill="#fff"/>',
         f'<text class="title" x="40" y="38">Phase breakdown at {digits:,} digits</text>',
-        '<text class="subtitle" x="40" y="58">Median wall time per phase; the unshaded '
-        "remainder is scheduling/conversion overhead.</text>",
+        '<text class="subtitle" x="40" y="58">Stacked bars show split, finalize, and format; '
+        "light gray is remaining overhead.</text>",
     ]
-    for i, (name, color) in enumerate(zip(phase_names, [c for _, c in phases])):
-        lx = 40 + i * 170
-        parts.append(f'<rect x="{lx}" y="74" width="14" height="14" rx="3" fill="{color}"/>')
-        parts.append(f'<text class="legend" x="{lx + 22}" y="86">{name}</text>')
 
+    legend_y = height - legend_h - 8
+    parts.append(f'<rect class="legend-box" x="36" y="{legend_y}" width="{width - 72}" height="36" rx="8"/>')
+    for i, (name, color) in enumerate(zip(phase_names, [c for _, c in phases])):
+        lx = 56 + i * 200
+        parts.append(f'<rect x="{lx}" y="{legend_y + 10}" width="16" height="16" rx="3" fill="{color}"/>')
+        parts.append(f'<text class="legend" x="{lx + 24}" y="{legend_y + 24}">{name}</text>')
+    lx = 56 + 3 * 200
+    parts.append(f'<rect x="{lx}" y="{legend_y + 10}" width="16" height="16" rx="3" fill="#e2e8f0"/>')
+    parts.append(f'<text class="legend" x="{lx + 24}" y="{legend_y + 24}">overhead</text>')
+
+    y0 = 96
     for index, r in enumerate(usable):
         y = y0 + index * (bar_h + gap)
         total = float(r["wall_ms"])
         label = LABELS.get(str(r["algorithm"]), str(r["algorithm"]))
-        parts.append(f'<text class="label" x="40" y="{fmt(y + bar_h / 2 + 4)}">{html.escape(label)}</text>')
+        parts.append(
+            f'<text class="label" x="36" y="{fmt(y + bar_h / 2 + 4)}" text-anchor="end">{html.escape(label)}</text>'
+        )
         total_w = total / max_wall * plot_w
         parts.append(
-            f'<rect x="{x0}" y="{fmt(y)}" width="{fmt(total_w)}" height="{bar_h}" rx="4" fill="#e2e8f0"/>'
+            f'<rect x="{x0}" y="{fmt(y)}" width="{fmt(total_w)}" height="{bar_h}" rx="5" fill="#e2e8f0"/>'
         )
         x = float(x0)
         for metric, color in phases:
@@ -309,7 +428,7 @@ def phase_breakdown(rows: list[dict[str, object]], digits: int, output: Path) ->
             )
             x += seg
         parts.append(
-            f'<text class="tick" x="{fmt(x0 + total_w + 8)}" y="{fmt(y + bar_h / 2 + 4)}">{fmt(total)} ms</text>'
+            f'<text class="tick" x="{fmt(x0 + total_w + 10)}" y="{fmt(y + bar_h / 2 + 4)}">{fmt(total)} ms</text>'
         )
 
     write(
@@ -341,10 +460,13 @@ HYPOTHESIS_TIMELINE = [
 def hypothesis_progression(output: Path) -> None:
     """Wall time at 1M digits across the hypothesis ledger (refutations omitted
     where they were reverted)."""
-    x0, y0, x1, y1 = 90, 90, 830, 420
-    width, height = 960, 540
+    x0, y0, x1, y1 = 90, 90, 830, 380
+    width = 1002
     n = len(HYPOTHESIS_TIMELINE)
     max_wall = max(w for _, w, _ in HYPOTHESIS_TIMELINE) * 1.18
+    legend_y = y1 + 56
+    legend_h = legend_height(n, cols=2)
+    height = int(legend_y + legend_h + 16)
 
     def x_at(i: int) -> float:
         return x0 + i / (n - 1) * (x1 - x0)
@@ -355,7 +477,7 @@ def hypothesis_progression(output: Path) -> None:
     parts = [
         f'<rect width="{width}" height="{height}" fill="#fff"/>',
         '<text class="title" x="40" y="38">Wall time at 1,000,000 digits across the hypothesis ledger</text>',
-        '<text class="subtitle" x="40" y="58">Verified medians; refuted hypotheses (H5, H9b, H10) were reverted and do not appear as stages.</text>',
+        '<text class="subtitle" x="40" y="58">Verified medians; refuted hypotheses (H5, H9b, H10) were reverted.</text>',
     ]
     for value in range(0, int(max_wall) + 1, 25):
         y = y_at(value)
@@ -363,19 +485,39 @@ def hypothesis_progression(output: Path) -> None:
         parts.append(f'<text class="tick" x="{x0 - 10}" y="{fmt(y + 4)}" text-anchor="end">{value}</text>')
     parts.append(f'<line class="axis" x1="{x0}" y1="{y1}" x2="{x1}" y2="{y1}"/>')
     parts.append(f'<line class="axis" x1="{x0}" y1="{y0}" x2="{x0}" y2="{y1}"/>')
-    parts.append(f'<text class="label" transform="translate(28 255) rotate(-90)" text-anchor="middle">Median wall (ms)</text>')
+    parts.append(
+        f'<text class="label" transform="translate(28 {fmt(y0 + (y1 - y0) / 2)}) rotate(-90)" '
+        f'text-anchor="middle">Median wall (ms)</text>'
+    )
+    parts.append(f'<text class="label" x="{fmt(x0 + (x1 - x0) / 2)}" y="{fmt(y1 + 36)}" text-anchor="middle">Hypothesis stage</text>')
 
     points = [(x_at(i), y_at(w)) for i, (_, w, _) in enumerate(HYPOTHESIS_TIMELINE)]
     path_data = " ".join(("M" if i == 0 else "L") + f"{fmt(x)} {fmt(y)}" for i, (x, y) in enumerate(points))
-    parts.append(f'<path d="{path_data}" fill="none" stroke="#dc2626" stroke-width="2.8" stroke-linejoin="round"/>')
-    for i, ((x, y), (name, wall, _)) in enumerate(zip(points, HYPOTHESIS_TIMELINE)):
-        parts.append(f'<circle cx="{fmt(x)}" cy="{fmt(y)}" r="4.5" fill="#dc2626" stroke="#fff" stroke-width="1.4"/>')
+    parts.append(
+        f'<path d="{path_data}" fill="none" stroke="#dc2626" stroke-width="3" stroke-linejoin="round"/>'
+    )
+    for i, ((x, y), (name, wall, desc)) in enumerate(zip(points, HYPOTHESIS_TIMELINE)):
         parts.append(
-            f'<text class="tick" x="{fmt(x)}" y="{fmt(y - 12)}" text-anchor="middle" font-weight="700">{fmt(wall)}</text>'
+            f'<circle cx="{fmt(x)}" cy="{fmt(y)}" r="5" fill="#dc2626" stroke="#fff" stroke-width="1.8"/>'
         )
         parts.append(
-            f'<text class="tick" transform="translate({fmt(x)} {y1 + 14}) rotate(35)" text-anchor="start">{html.escape(name)}</text>'
+            f'<text class="tick" x="{fmt(x)}" y="{fmt(y - 14)}" text-anchor="middle" font-weight="700">{fmt(wall)}</text>'
         )
+        parts.append(f'<text class="tick" x="{fmt(x)}" y="{fmt(y1 + 18)}" text-anchor="middle">{i + 1}</text>')
+
+    # Numbered legend below with full hypothesis names and descriptions.
+    rows = math.ceil(n / 2)
+    box_h = LEGEND_PAD * 2 + rows * LEGEND_ROW_HEIGHT
+    parts.append(f'<rect class="legend-box" x="36" y="{legend_y}" width="930" height="{box_h}" rx="8"/>')
+    col_w = 450
+    for i, (name, wall, desc) in enumerate(HYPOTHESIS_TIMELINE):
+        col = i // rows
+        row = i % rows
+        x = 52 + col * col_w
+        y = legend_y + LEGEND_PAD + row * LEGEND_ROW_HEIGHT + 4
+        parts.append(f'<text class="legend" x="{fmt(x)}" y="{fmt(y)}">'
+                     f'<tspan font-weight="700">{i + 1}.</tspan> {html.escape(name)} '
+                     f'({fmt(wall)} ms) — {html.escape(desc)}</text>')
 
     write(
         output,
@@ -390,21 +532,59 @@ def hypothesis_progression(output: Path) -> None:
 
 
 def index_markdown(output_dir: Path) -> None:
-    content = """# SATO-X Figures
+    content = """# SATO-X Benchmark Figures
 
 Generated from `results/benchmark.csv` with `tools/make_figures.py`.
 
-![Wall time](wall_time_log.svg)
+For method descriptions and formulae, see [Methods comparison](../methods-comparison.md).
+
+## Performance
+
+### Wall time by precision
+
+Median verified wall time across decimal digit targets (log–log scale). Lower is better.
+
+![Wall time by precision](wall_time_log.svg)
+
+### Relative wall time vs. Chudnovsky baseline
+
+Values below the dashed line (1.0) are faster than standard Chudnovsky binary splitting at the same precision.
 
 ![Relative wall time](relative_wall_time.svg)
 
+### Multiplication bit volume
+
+Machine-independent work metric for binary-splitting series evaluation: sum of operand bit-lengths over every split-phase multiplication.
+
 ![Multiplication bit volume](bit_volume.svg)
+
+## Work breakdown
+
+### Phase timing at maximum precision
+
+Where each algorithm spends time: series/split, finalize, format, and overhead.
 
 ![Phase breakdown](phase_breakdown.svg)
 
-![Hypothesis progression](hypothesis_progression.svg)
+### Terms or iterations
+
+Series methods report term counts; AGM reports iterations.
 
 ![Terms or iterations](terms_or_iterations.svg)
+
+## Research progression
+
+### Hypothesis ledger at 1M digits
+
+Wall-time improvements from the optimization hypothesis sequence. Numbered stages are explained in the legend below the chart.
+
+![Hypothesis progression](hypothesis_progression.svg)
+
+## Correctness
+
+### Verification matrix
+
+Green cells passed full-prefix verification; gray cells exceed the algorithm's precision cap.
 
 ![Verification matrix](verification_matrix.svg)
 """
@@ -438,6 +618,7 @@ def main() -> int:
         "Relative wall time",
         output_dir / "relative_wall_time.svg",
         y_log=False,
+        reference_y=1.0,
     )
     line_chart(
         rows,
