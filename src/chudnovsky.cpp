@@ -82,6 +82,8 @@ class ChudnovskyAlgorithm final : public PiAlgorithm {
         result.cancelled_bits = bs_stats.cancelled_bits;
         result.max_operand_bits = bs_stats.max_operand_bits;
         result.parallel_depth = bs_stats.parallel_depth;
+        result.mul_count = bs_stats.mul_count;
+        result.mul_bit_volume = bs_stats.mul_bit_volume;
 
         const int precision_bits = bits_for_decimal_digits(decimal_digits, effective_guard_digits);
         const Timer finalize_timer;

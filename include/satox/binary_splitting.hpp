@@ -25,6 +25,8 @@ struct HypergeometricBsSpec {
     bool leaf_t_uses_q = false;
     bool gcd_cancellation = false;
     bool leaf_pq_cancellation = false;
+    // Terms accumulated iteratively before the recursion takes over.
+    unsigned long leaf_block_terms = 8;
 };
 
 struct HypergeometricBsResult {
@@ -44,6 +46,11 @@ struct BinarySplittingStats {
     double cancelled_bits = 0.0;
     unsigned long long max_operand_bits = 0;
     unsigned int parallel_depth = 0;
+    // Machine-independent work metric: every multiplication contributes
+    // bits(a) + bits(b). Comparable across variants that share the same
+    // multiplication substrate (GMP/MPFR on this machine).
+    unsigned long long mul_count = 0;
+    double mul_bit_volume = 0.0;
 };
 
 void binary_split_hypergeometric(const HypergeometricBsSpec &spec, unsigned long a,

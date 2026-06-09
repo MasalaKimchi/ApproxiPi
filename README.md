@@ -5,11 +5,22 @@ reproducible C++17 + GMP + MPFR environment. The MVP treats Chudnovsky binary
 splitting as the baseline to beat and rejects speed claims for candidate
 formulas until they pass the same verification pipeline.
 
+The repository doubles as the artifact for a case study in AI-driven
+performance engineering: a hypothesis ledger with pre-registered predictions
+and recorded refutations (`docs/research-log.md`) and a paper-style writeup
+(`docs/PAPER.md`). Headline at 10^6 digits on this machine, all rows
+byte-identical and verified: our truncated-crown Chudnovsky runs in 59.3 ms
+vs 99.0 ms for FLINT/Arb `arb_const_pi` and 458 ms for MPFR `mpfr_const_pi`.
+
 ## Build
 
 ```sh
 make
 ```
+
+FLINT is optional: when `pkg-config --exists flint` succeeds (e.g.
+`brew install flint`), the `arb_const_pi` external baseline is compiled in;
+otherwise it reports itself as unavailable and everything else still builds.
 
 ## Test
 
@@ -48,6 +59,25 @@ the statistics:
 
 The CSV preserves a `wall_ms` column for plotting, but it now represents median
 wall time and also includes `min_wall_ms`, `max_wall_ms`, and `stddev_wall_ms`.
+
+It also reports a machine-independent work metric: `mul_count` and
+`mul_bit_volume` accumulate `bits(a) + bits(b)` over every series-phase
+multiplication, so "less work" can be distinguished from "restructured work"
+independently of the host machine.
+
+## Autotuning (H11)
+
+```sh
+./bin/satox-bench --tune --digits 1000000 --trials 3 --passes 2 --out results
+```
+
+Coordinate descent over the crown knob space (leaf block, chunk depth,
+parallel levels, intra-node threshold, root split ratio). The winning profile
+is cached to `results/tuning.json`; every evaluation is logged to
+`results/tuning-log.csv`. When a profile exists, the benchmark adds a
+`chudnovsky_bs_crown_tuned` row that loads it at run time. Measured outcome
+on this machine: <2% over the hand-derived defaults (H11 refuted; see the
+research log).
 
 ## Candidate Formula Metadata
 
@@ -105,6 +135,9 @@ The figures are written to `docs/figures/`:
 
 - `wall_time_log.svg`
 - `relative_wall_time.svg`
+- `bit_volume.svg` (machine-independent multiplication work)
+- `phase_breakdown.svg` (split/finalize/format stacked bars at the largest size)
+- `hypothesis_progression.svg` (wall time at 1M digits across the ledger)
 - `terms_or_iterations.svg`
 - `verification_matrix.svg`
 
@@ -117,11 +150,32 @@ as a wall-time race, convergence-work animation, and verification matrix.
 - `chudnovsky_bs`: Chudnovsky binary splitting baseline.
 - `chudnovsky_bs_valuation`: Chudnovsky with opt-in leaf valuation
   cancellation to reduce operand growth.
+- `chudnovsky_bs_crown`: truncated-crown binary splitting (TCBS). Exact
+  integer chunks at the bottom of the tree, then an MPFR fixed-point "crown"
+  on top whose per-node precision is capped by each subtree's contribution
+  offset (derived rigorously from the exact chunk bit sizes). The crown skips
+  P products on the rightmost spine, never forms the root Q (pi only needs
+  `C * Ql * Qr / T`), warm-starts the Newton reciprocal of T from the root
+  children behind a precision-margin gate, pipelines the value-independent
+  constants `sqrt(10005)` and `10^digits` under the series evaluation, and
+  renders decimals with an 8-way parallel divide-and-conquer conversion.
+  H12 additionally splices the decimal output: the high half of the digits is
+  rendered concurrently with the Newton correction (which provably cannot
+  change it, enforced by an integer range check with a re-render fallback).
+  Verified at all benchmark sizes; ~2.4x faster than `chudnovsky_bs` at
+  10^6 digits and ~2.9x at 10^5 on this machine. The hypothesis-by-hypothesis
+  derivation, including refuted attempts, is in `docs/research-log.md`.
+- `chudnovsky_bs_crown_tuned`: the same kernel driven by the cached autotune
+  profile (only listed when `results/tuning.json` exists).
 - `ramanujan_classic_bs`: classical Ramanujan series with binary splitting.
 - `machin_arctan`: independent Machin arctangent identity comparator.
 - `gauss_legendre_agm`: quadratic-convergent AGM comparator.
 - `borwein_cubic`: cubic-convergent Borwein comparator.
 - `borwein_quartic`: quartic-convergent Borwein-style comparator.
+- `mpfr_const_pi`: external baseline; MPFR's own pi with a cold cache per
+  trial, run through the same format/verify pipeline.
+- `arb_const_pi`: external baseline; FLINT/Arb's pi with a cold cache per
+  trial and all hardware threads granted (requires FLINT at build time).
 
 SATO-X discovery is not yet implemented as a proof-producing formula search
 engine. The current project is the benchmark and verification substrate needed

@@ -2,12 +2,135 @@
 
 #include <gmp.h>
 
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <future>
 #include <sstream>
 #include <stdexcept>
 
 namespace satox {
+
+namespace {
+
+constexpr int kMinParallelFormatDigits = 64;
+
+std::string mpz_fixed_width_decimal(const mpz_t value, int width) {
+    char *raw = mpz_get_str(nullptr, 10, value);
+    std::string digits(raw);
+    void (*free_func)(void *, size_t) = nullptr;
+    mp_get_memory_functions(nullptr, nullptr, &free_func);
+    free_func(raw, digits.size() + 1);
+
+    if (static_cast<int>(digits.size()) > width) {
+        throw std::runtime_error("decimal part wider than expected");
+    }
+    std::string out;
+    out.reserve(static_cast<size_t>(width));
+    out.append(static_cast<size_t>(width) - digits.size(), '0');
+    out += digits;
+    return out;
+}
+
+} // namespace
+
+DecimalPowerCache::DecimalPowerCache() {
+    mpz_init(p10_full);
+    for (mpz_t &power : pows) {
+        mpz_init(power);
+    }
+}
+
+DecimalPowerCache::~DecimalPowerCache() {
+    mpz_clear(p10_full);
+    for (mpz_t &power : pows) {
+        mpz_clear(power);
+    }
+}
+
+void build_decimal_power_cache(int digits_after_decimal, DecimalPowerCache &cache) {
+    cache.digits = digits_after_decimal;
+    const int total_width = digits_after_decimal + 1;
+    cache.part_width = std::max(1, total_width / 8);
+    mpz_ui_pow_ui(cache.pows[0], 10ul, static_cast<unsigned long>(cache.part_width));
+    mpz_mul(cache.pows[1], cache.pows[0], cache.pows[0]);
+    mpz_mul(cache.pows[2], cache.pows[1], cache.pows[1]);
+    mpz_ui_pow_ui(cache.p10_full, 10ul, static_cast<unsigned long>(digits_after_decimal));
+    cache.ready = true;
+}
+
+namespace {
+
+// Recursive 8-way divide-and-conquer rendering: at `level` the low part holds
+// exactly part_width * 2^level digits, split off with the cached power.
+std::string render_fixed_decimal(const mpz_t value, int width, int level,
+                                 const DecimalPowerCache &cache) {
+    if (level < 0) {
+        return mpz_fixed_width_decimal(value, width);
+    }
+    const int low_width = cache.part_width << level;
+    if (width <= low_width) {
+        return render_fixed_decimal(value, width, level - 1, cache);
+    }
+
+    mpz_t high;
+    mpz_t low;
+    mpz_init(high);
+    mpz_init(low);
+    mpz_tdiv_qr(high, low, value, cache.pows[level]);
+
+    std::string high_part;
+    auto high_future = std::async(std::launch::async, [&]() {
+        high_part = render_fixed_decimal(high, width - low_width, level - 1, cache);
+    });
+    std::string low_part = render_fixed_decimal(low, low_width, level - 1, cache);
+    high_future.get();
+
+    mpz_clear(high);
+    mpz_clear(low);
+    return high_part + low_part;
+}
+
+} // namespace
+
+std::string render_decimal_fixed(const mpz_t value, int width, int level,
+                                 const DecimalPowerCache &cache) {
+    return render_fixed_decimal(value, width, level, cache);
+}
+
+std::string scaled_pi_to_decimal_parallel(mpfr_t value_scaled, int digits_after_decimal,
+                                          const DecimalPowerCache &cache) {
+    const int total_width = digits_after_decimal + 1;
+
+    if (!cache.ready || cache.digits != digits_after_decimal ||
+        digits_after_decimal < kMinParallelFormatDigits ||
+        total_width - 7 * cache.part_width < 1 || mpfr_sgn(value_scaled) <= 0) {
+        // Undo the 10^digits scaling and use the serial formatter.
+        mpfr_t value;
+        mpfr_init2(value, mpfr_get_prec(value_scaled));
+        if (cache.ready) {
+            mpfr_div_z(value, value_scaled, cache.p10_full, MPFR_RNDN);
+        } else {
+            mpfr_set(value, value_scaled, MPFR_RNDN);
+        }
+        std::string out = mpfr_to_decimal_prefix(value, digits_after_decimal);
+        mpfr_clear(value);
+        return out;
+    }
+
+    mpz_t z;
+    mpz_init(z);
+    mpfr_get_z(z, value_scaled, MPFR_RNDZ);
+    std::string digits = render_fixed_decimal(z, total_width, 2, cache);
+    mpz_clear(z);
+
+    std::string out;
+    out.reserve(digits.size() + 1);
+    out += digits.substr(0, digits.size() - static_cast<size_t>(digits_after_decimal));
+    out += '.';
+    out += digits.substr(digits.size() - static_cast<size_t>(digits_after_decimal));
+    return out;
+}
 
 int bits_for_decimal_digits(int decimal_digits, int guard_digits) {
     if (decimal_digits < 0 || guard_digits < 0) {

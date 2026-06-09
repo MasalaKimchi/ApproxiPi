@@ -5,6 +5,14 @@ CXXFLAGS ?= -std=c++17 -O3 -Wall -Wextra -pedantic
 CPPFLAGS += -Iinclude $(shell $(PKG_CONFIG) --cflags gmp mpfr) -MMD -MP
 LDLIBS += $(shell $(PKG_CONFIG) --libs gmp mpfr)
 
+# FLINT/Arb is optional: when present, the arb_const_pi external baseline is
+# compiled in; otherwise it reports itself as unavailable.
+HAVE_FLINT := $(shell $(PKG_CONFIG) --exists flint && echo 1)
+ifeq ($(HAVE_FLINT),1)
+CPPFLAGS += -DSATOX_HAVE_FLINT $(shell $(PKG_CONFIG) --cflags flint)
+LDLIBS += $(shell $(PKG_CONFIG) --libs flint)
+endif
+
 SRC = \
 	src/agm.cpp \
 	src/binary_splitting.cpp \
@@ -14,10 +22,14 @@ SRC = \
 	src/borwein_cubic.cpp \
 	src/candidate.cpp \
 	src/chudnovsky.cpp \
+	src/chudnovsky_crown.cpp \
+	src/crown.cpp \
+	src/external_baselines.cpp \
 	src/formula_spec.cpp \
 	src/format.cpp \
 	src/machin.cpp \
 	src/ramanujan.cpp \
+	src/tuner.cpp \
 	src/verification.cpp
 
 OBJ = $(SRC:src/%.cpp=build/%.o)

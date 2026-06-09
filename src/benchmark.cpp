@@ -20,11 +20,18 @@ std::vector<std::unique_ptr<PiAlgorithm>> make_default_algorithms() {
     std::vector<std::unique_ptr<PiAlgorithm>> algorithms;
     algorithms.push_back(make_chudnovsky_algorithm());
     algorithms.push_back(make_chudnovsky_valuation_algorithm());
+    algorithms.push_back(make_chudnovsky_crown_algorithm());
+    // Only benchmark the tuned variant once a tuning profile exists.
+    if (std::ifstream("results/tuning.json")) {
+        algorithms.push_back(make_chudnovsky_crown_tuned_algorithm());
+    }
     algorithms.push_back(make_ramanujan_algorithm());
     algorithms.push_back(make_machin_algorithm());
     algorithms.push_back(make_agm_algorithm());
     algorithms.push_back(make_borwein_cubic_algorithm());
     algorithms.push_back(make_borwein_quartic_algorithm());
+    algorithms.push_back(make_mpfr_const_pi_algorithm());
+    algorithms.push_back(make_arb_const_pi_algorithm());
     return algorithms;
 }
 
@@ -32,7 +39,7 @@ std::string csv_header() {
     return "algorithm,family,digits,guard_digits,trials,supported,verified,wall_ms,min_wall_ms,"
            "max_wall_ms,stddev_wall_ms,cpu_ms,split_ms,finalize_ms,format_ms,verify_ms,"
            "terms_or_iterations,estimated_digits_per_term,gcd_reductions,cancelled_bits,"
-           "max_operand_bits,parallel_depth,verification_method,"
+           "max_operand_bits,parallel_depth,mul_count,mul_bit_volume,verification_method,"
            "baseline,relative_wall_time,prefix_hash,error\n";
 }
 
@@ -47,10 +54,11 @@ std::string result_to_csv(const ComputeResult &result, const std::string &baseli
         << ',' << std::fixed << std::setprecision(3) << result.wall_ms << ','
         << result.wall_ms << ',' << result.wall_ms << ',' << 0.0 << ',' << result.cpu_ms << ','
         << result.split_ms << ',' << result.finalize_ms << ',' << result.format_ms << ','
-        << result.verify_ms << ',' << result.terms_or_iterations << ',' << std::setprecision(6)
+        << result.verify_ms         << ',' << result.terms_or_iterations << ',' << std::setprecision(6)
         << result.estimated_digits_per_term << ',' << result.gcd_reductions << ','
         << std::setprecision(3) << result.cancelled_bits << ',' << result.max_operand_bits << ','
-        << result.parallel_depth << ',' << '"'
+        << result.parallel_depth << ',' << result.mul_count << ',' << std::setprecision(0)
+        << result.mul_bit_volume << std::setprecision(3) << ',' << '"'
         << result.verification_method << '"'
         << ',' << baseline_name << ',' << std::setprecision(6) << relative << ','
         << short_hash(result.decimal_prefix) << ',' << '"' << result.error << '"' << '\n';
@@ -161,7 +169,8 @@ std::string stats_to_csv(const ResultStats &stats, const std::string &baseline_n
         << result.terms_or_iterations << ',' << std::setprecision(6)
         << result.estimated_digits_per_term << ',' << result.gcd_reductions << ','
         << std::setprecision(3) << result.cancelled_bits << ',' << result.max_operand_bits << ','
-        << result.parallel_depth << ',' << '"'
+        << result.parallel_depth << ',' << result.mul_count << ',' << std::setprecision(0)
+        << result.mul_bit_volume << std::setprecision(3) << ',' << '"'
         << result.verification_method << '"'
         << ',' << baseline_name << ',' << std::setprecision(6) << relative << ','
         << short_hash(result.decimal_prefix) << ',' << '"' << result.error << '"' << '\n';
@@ -195,6 +204,9 @@ std::string result_to_json(const ComputeResult &result, const std::string &basel
         << "\"cancelled_bits\":" << result.cancelled_bits << ','
         << "\"max_operand_bits\":" << result.max_operand_bits << ','
         << "\"parallel_depth\":" << result.parallel_depth << ','
+        << "\"mul_count\":" << result.mul_count << ','
+        << "\"mul_bit_volume\":" << std::setprecision(0) << result.mul_bit_volume
+        << std::setprecision(3) << ','
         << "\"verification_method\":\"" << escape_json(result.verification_method) << "\","
         << "\"baseline\":\"" << escape_json(baseline_name) << "\","
         << "\"relative_wall_time\":" << relative << ','
@@ -225,12 +237,26 @@ int run_benchmark(const BenchmarkOptions &options) {
           "opt-in leaf valuation cancellation, and `log10(396^4 / 256)` for "
           "Ramanujan term-count estimation. Phase "
           "columns expose split/finalize/format/verify bottlenecks.\n\n";
-    md << "| Digits | Algorithm | Supported | Verified | Median wall ms | Split | Finalize | Format | Verify | Terms/iterations | Max operand bits | Parallel depth | "
+    md << "| Digits | Algorithm | Supported | Verified | Median wall ms | Split | Finalize | Format | Verify | Terms/iterations | Max operand bits | Mul Gbit | Parallel depth | "
           "Relative to Chudnovsky | Notes |\n";
-    md << "|---:|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|\n";
+    md << "|---:|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|\n";
 
     bool first_json = true;
     std::vector<std::unique_ptr<PiAlgorithm>> algorithms = make_default_algorithms();
+    if (!options.algorithms.empty()) {
+        algorithms.erase(
+            std::remove_if(algorithms.begin(), algorithms.end(),
+                           [&options](const std::unique_ptr<PiAlgorithm> &algorithm) {
+                               const std::string name = algorithm->metadata().name;
+                               return std::find(options.algorithms.begin(),
+                                                options.algorithms.end(),
+                                                name) == options.algorithms.end();
+                           }),
+            algorithms.end());
+        if (algorithms.empty()) {
+            throw std::runtime_error("--algorithms matched no known algorithm");
+        }
+    }
 
     for (int digits : options.digits) {
         double baseline_wall_ms = 0.0;
@@ -273,6 +299,7 @@ int run_benchmark(const BenchmarkOptions &options) {
                << stats.median_split_ms << " | " << stats.median_finalize_ms << " | "
                << stats.median_format_ms << " | " << stats.median_verify_ms << " | "
                << result.terms_or_iterations << " | " << result.max_operand_bits << " | "
+               << std::setprecision(3) << result.mul_bit_volume / 1e9 << " | "
                << result.parallel_depth << " | "
                << std::setprecision(3) << relative
                << " | " << (result.error.empty() ? "" : result.error) << " |\n";

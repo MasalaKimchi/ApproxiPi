@@ -1,0 +1,8 @@
+{
+  "min_chunk_terms": 256,
+  "max_crown_depth": 9,
+  "max_parallel_levels": 5,
+  "intra_node_parallel_bits": 262144,
+  "root_split_sixteenths": 9,
+  "leaf_block_terms": 8
+}

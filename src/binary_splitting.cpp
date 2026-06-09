@@ -8,9 +8,19 @@
 namespace satox {
 namespace {
 
-constexpr unsigned long kLeafBlockTerms = 8;
 constexpr unsigned long kMinTermsPerParallelTask = 4096;
 constexpr unsigned int kMaxParallelDepth = 4;
+
+// Records one multiplication out = a * b in the machine-independent work
+// metric (sum of operand bit sizes). Called before the product is formed.
+inline void count_mul(BinarySplittingStats *stats, const mpz_t a, const mpz_t b) {
+    if (stats == nullptr) {
+        return;
+    }
+    ++stats->mul_count;
+    stats->mul_bit_volume +=
+        static_cast<double>(mpz_sizeinbase(a, 2)) + static_cast<double>(mpz_sizeinbase(b, 2));
+}
 
 void set_linear_product(mpz_t out, const std::vector<LinearFactor> &factors, unsigned long n) {
     mpz_set_ui(out, 1ul);
@@ -90,6 +100,8 @@ void merge_stats(BinarySplittingStats *target, const BinarySplittingStats &sourc
     target->cancelled_bits += source.cancelled_bits;
     target->max_operand_bits = std::max(target->max_operand_bits, source.max_operand_bits);
     target->parallel_depth = std::max(target->parallel_depth, source.parallel_depth);
+    target->mul_count += source.mul_count;
+    target->mul_bit_volume += source.mul_bit_volume;
 }
 
 void set_leaf(const HypergeometricBsSpec &spec, unsigned long n, HypergeometricBsResult &out,
@@ -131,6 +143,10 @@ void set_leaf(const HypergeometricBsSpec &spec, unsigned long n, HypergeometricB
 void combine_nodes(const HypergeometricBsSpec &spec, const HypergeometricBsResult &left,
                    const HypergeometricBsResult &right, HypergeometricBsResult &out,
                    BinarySplittingStats *stats) {
+    count_mul(stats, left.p, right.p);
+    count_mul(stats, left.q, right.q);
+    count_mul(stats, left.t, right.q);
+    count_mul(stats, left.p, right.t);
     mpz_mul(out.p, left.p, right.p);
     mpz_mul(out.q, left.q, right.q);
     mpz_mul(out.t, left.t, right.q);
@@ -143,6 +159,10 @@ void combine_nodes(const HypergeometricBsSpec &spec, const HypergeometricBsResul
 
 void append_leaf(const HypergeometricBsSpec &spec, HypergeometricBsResult &out,
                  const HypergeometricBsResult &leaf, BinarySplittingStats *stats) {
+    count_mul(stats, out.t, leaf.q);
+    count_mul(stats, out.p, leaf.t);
+    count_mul(stats, out.p, leaf.p);
+    count_mul(stats, out.q, leaf.q);
     mpz_mul(out.t, out.t, leaf.q);
     mpz_addmul(out.t, out.p, leaf.t);
     mpz_mul(out.p, out.p, leaf.p);
@@ -161,7 +181,7 @@ void binary_split_hypergeometric_impl(const HypergeometricBsSpec &spec, unsigned
         throw std::invalid_argument("binary_split_hypergeometric requires b > a");
     }
 
-    if (b - a <= kLeafBlockTerms) {
+    if (b - a <= std::max(1ul, spec.leaf_block_terms)) {
         set_leaf(spec, a, out, stats);
         if (b - a > 1) {
             HypergeometricBsResult leaf;

@@ -14,23 +14,31 @@ from typing import Callable, Iterable
 PALETTE = {
     "chudnovsky_bs": "#2155d9",
     "chudnovsky_bs_valuation": "#0891b2",
+    "chudnovsky_bs_crown": "#dc2626",
+    "chudnovsky_bs_crown_tuned": "#f59e0b",
     "ramanujan_classic_bs": "#c2410c",
     "ramanujan_classic": "#c2410c",
     "machin_arctan": "#b45309",
     "gauss_legendre_agm": "#15803d",
     "borwein_cubic": "#9333ea",
     "borwein_quartic": "#7c3aed",
+    "mpfr_const_pi": "#475569",
+    "arb_const_pi": "#0f766e",
 }
 
 LABELS = {
     "chudnovsky_bs": "Chudnovsky BS",
     "chudnovsky_bs_valuation": "Chudnovsky valuation",
+    "chudnovsky_bs_crown": "Truncated crown (ours)",
+    "chudnovsky_bs_crown_tuned": "Crown + autotune",
     "ramanujan_classic_bs": "Ramanujan BS",
     "ramanujan_classic": "Ramanujan",
     "machin_arctan": "Machin arctan",
     "gauss_legendre_agm": "AGM",
     "borwein_cubic": "Borwein cubic",
     "borwein_quartic": "Borwein quartic",
+    "mpfr_const_pi": "MPFR const_pi",
+    "arb_const_pi": "FLINT/Arb const_pi",
 }
 
 GRID = "#d7dde8"
@@ -56,6 +64,10 @@ def load_rows(path: Path) -> list[dict[str, object]]:
             row["terms_or_iterations"] = int(str(raw["terms_or_iterations"]))
             row["estimated_digits_per_term"] = float(str(raw["estimated_digits_per_term"]))
             row["relative_wall_time"] = float(str(raw["relative_wall_time"]))
+            row["split_ms"] = float(str(raw.get("split_ms", 0) or 0))
+            row["finalize_ms"] = float(str(raw.get("finalize_ms", 0) or 0))
+            row["format_ms"] = float(str(raw.get("format_ms", 0) or 0))
+            row["mul_bit_volume"] = float(str(raw.get("mul_bit_volume", 0) or 0))
             rows.append(row)
     return rows
 
@@ -246,6 +258,137 @@ def verification_matrix(rows: list[dict[str, object]], output: Path) -> None:
     )
 
 
+def phase_breakdown(rows: list[dict[str, object]], digits: int, output: Path) -> None:
+    """Stacked horizontal bars of split/finalize/format wall time at one size."""
+    usable = [
+        r
+        for r in rows
+        if int(r["digits"]) == digits and r["supported"] and r["verified"]
+        and float(r["wall_ms"]) > 0
+    ]
+    usable.sort(key=lambda r: float(r["wall_ms"]))
+    if not usable:
+        return
+    phases = [("split_ms", "#2155d9"), ("finalize_ms", "#dc2626"), ("format_ms", "#f59e0b")]
+    phase_names = ["series/split", "finalize", "format"]
+    x0, y0 = 230, 110
+    bar_h, gap = 30, 18
+    plot_w = 600
+    width = 960
+    height = y0 + len(usable) * (bar_h + gap) + 70
+    max_wall = max(float(r["wall_ms"]) for r in usable)
+
+    parts = [
+        f'<rect width="{width}" height="{height}" fill="#fff"/>',
+        f'<text class="title" x="40" y="38">Phase breakdown at {digits:,} digits</text>',
+        '<text class="subtitle" x="40" y="58">Median wall time per phase; the unshaded '
+        "remainder is scheduling/conversion overhead.</text>",
+    ]
+    for i, (name, color) in enumerate(zip(phase_names, [c for _, c in phases])):
+        lx = 40 + i * 170
+        parts.append(f'<rect x="{lx}" y="74" width="14" height="14" rx="3" fill="{color}"/>')
+        parts.append(f'<text class="legend" x="{lx + 22}" y="86">{name}</text>')
+
+    for index, r in enumerate(usable):
+        y = y0 + index * (bar_h + gap)
+        total = float(r["wall_ms"])
+        label = LABELS.get(str(r["algorithm"]), str(r["algorithm"]))
+        parts.append(f'<text class="label" x="40" y="{fmt(y + bar_h / 2 + 4)}">{html.escape(label)}</text>')
+        total_w = total / max_wall * plot_w
+        parts.append(
+            f'<rect x="{x0}" y="{fmt(y)}" width="{fmt(total_w)}" height="{bar_h}" rx="4" fill="#e2e8f0"/>'
+        )
+        x = float(x0)
+        for metric, color in phases:
+            value = float(r[metric])
+            if value <= 0:
+                continue
+            seg = value / max_wall * plot_w
+            parts.append(
+                f'<rect x="{fmt(x)}" y="{fmt(y)}" width="{fmt(seg)}" height="{bar_h}" fill="{color}"/>'
+            )
+            x += seg
+        parts.append(
+            f'<text class="tick" x="{fmt(x0 + total_w + 8)}" y="{fmt(y + bar_h / 2 + 4)}">{fmt(total)} ms</text>'
+        )
+
+    write(
+        output,
+        svg_document(
+            width,
+            height,
+            f"Phase breakdown at {digits} digits",
+            "Median split/finalize/format wall time per verified algorithm.",
+            parts_to_string(parts),
+        ),
+    )
+
+
+HYPOTHESIS_TIMELINE = [
+    ("H0 baseline", 144.2, "exact binary splitting"),
+    ("H1 crown", 130.5, "truncated MPFR crown"),
+    ("H2 pipeline", 92.6, "overlap constants + parallel format"),
+    ("H3 intra-node", 72.8, "parallel root products"),
+    ("H4 warm Newton", 69.9, "warm-start 1/T"),
+    ("H7 root-Q elision", 71.9, "never form root Q"),
+    ("H9a deeper crown", 68.2, "more chunks"),
+    ("H1-H9 final", 64.0, "hand-tuned configuration"),
+    ("H11 autotune", 62.7, "knob search (refuted: <2%)"),
+    ("H12 spliced prefix", 60.0, "render high half under Newton correction"),
+]
+
+
+def hypothesis_progression(output: Path) -> None:
+    """Wall time at 1M digits across the hypothesis ledger (refutations omitted
+    where they were reverted)."""
+    x0, y0, x1, y1 = 90, 90, 830, 420
+    width, height = 960, 540
+    n = len(HYPOTHESIS_TIMELINE)
+    max_wall = max(w for _, w, _ in HYPOTHESIS_TIMELINE) * 1.18
+
+    def x_at(i: int) -> float:
+        return x0 + i / (n - 1) * (x1 - x0)
+
+    def y_at(value: float) -> float:
+        return y1 - value / max_wall * (y1 - y0)
+
+    parts = [
+        f'<rect width="{width}" height="{height}" fill="#fff"/>',
+        '<text class="title" x="40" y="38">Wall time at 1,000,000 digits across the hypothesis ledger</text>',
+        '<text class="subtitle" x="40" y="58">Verified medians; refuted hypotheses (H5, H9b, H10) were reverted and do not appear as stages.</text>',
+    ]
+    for value in range(0, int(max_wall) + 1, 25):
+        y = y_at(value)
+        parts.append(f'<line class="grid" x1="{x0}" y1="{fmt(y)}" x2="{x1}" y2="{fmt(y)}"/>')
+        parts.append(f'<text class="tick" x="{x0 - 10}" y="{fmt(y + 4)}" text-anchor="end">{value}</text>')
+    parts.append(f'<line class="axis" x1="{x0}" y1="{y1}" x2="{x1}" y2="{y1}"/>')
+    parts.append(f'<line class="axis" x1="{x0}" y1="{y0}" x2="{x0}" y2="{y1}"/>')
+    parts.append(f'<text class="label" transform="translate(28 255) rotate(-90)" text-anchor="middle">Median wall (ms)</text>')
+
+    points = [(x_at(i), y_at(w)) for i, (_, w, _) in enumerate(HYPOTHESIS_TIMELINE)]
+    path_data = " ".join(("M" if i == 0 else "L") + f"{fmt(x)} {fmt(y)}" for i, (x, y) in enumerate(points))
+    parts.append(f'<path d="{path_data}" fill="none" stroke="#dc2626" stroke-width="2.8" stroke-linejoin="round"/>')
+    for i, ((x, y), (name, wall, _)) in enumerate(zip(points, HYPOTHESIS_TIMELINE)):
+        parts.append(f'<circle cx="{fmt(x)}" cy="{fmt(y)}" r="4.5" fill="#dc2626" stroke="#fff" stroke-width="1.4"/>')
+        parts.append(
+            f'<text class="tick" x="{fmt(x)}" y="{fmt(y - 12)}" text-anchor="middle" font-weight="700">{fmt(wall)}</text>'
+        )
+        parts.append(
+            f'<text class="tick" transform="translate({fmt(x)} {y1 + 14}) rotate(35)" text-anchor="start">{html.escape(name)}</text>'
+        )
+
+    write(
+        output,
+        svg_document(
+            width,
+            height,
+            "Hypothesis ledger progression",
+            "Median verified wall time at one million digits after each confirmed hypothesis.",
+            parts_to_string(parts),
+        ),
+    )
+
+
 def index_markdown(output_dir: Path) -> None:
     content = """# SATO-X Figures
 
@@ -254,6 +397,12 @@ Generated from `results/benchmark.csv` with `tools/make_figures.py`.
 ![Wall time](wall_time_log.svg)
 
 ![Relative wall time](relative_wall_time.svg)
+
+![Multiplication bit volume](bit_volume.svg)
+
+![Phase breakdown](phase_breakdown.svg)
+
+![Hypothesis progression](hypothesis_progression.svg)
 
 ![Terms or iterations](terms_or_iterations.svg)
 
@@ -299,6 +448,20 @@ def main() -> int:
         output_dir / "terms_or_iterations.svg",
         y_log=True,
     )
+    bit_rows = [r for r in rows if float(r["mul_bit_volume"]) > 0]
+    if bit_rows:
+        line_chart(
+            bit_rows,
+            "mul_bit_volume",
+            "Series-evaluation multiplication bit volume",
+            "Machine-independent work metric: sum of operand bits over every split-phase multiplication.",
+            "Bit volume (bits, log)",
+            output_dir / "bit_volume.svg",
+            y_log=True,
+        )
+    largest = max(int(r["digits"]) for r in rows)
+    phase_breakdown(rows, largest, output_dir / "phase_breakdown.svg")
+    hypothesis_progression(output_dir / "hypothesis_progression.svg")
     verification_matrix(rows, output_dir / "verification_matrix.svg")
     index_markdown(output_dir)
     print(f"Wrote optimized SVG figures to {output_dir}")
