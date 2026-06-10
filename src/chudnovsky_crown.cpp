@@ -5,7 +5,6 @@
 #include "satox/format.hpp"
 #include "satox/limits.hpp"
 #include "satox/memory_estimate.hpp"
-#include "satox/residue_verify.hpp"
 #include "satox/run_config.hpp"
 #include "satox/timer.hpp"
 #include "satox/verification.hpp"
@@ -191,16 +190,22 @@ class ChudnovskyCrownAlgorithm final : public PiAlgorithm {
             mpfr_div(pi_scaled, q, t, MPFR_RNDN);
             result.finalize_ms = small_finalize_timer.wall_ms();
 
+            mpz_t p10;
+            mpz_init(p10);
+            mpz_ui_pow_ui(p10, 10ul, static_cast<unsigned long>(decimal_digits));
+            mpfr_mul_z(pi_scaled, pi_scaled, p10, MPFR_RNDN);
+
+            result.verified = verify_scaled_pi_mpfr(pi_scaled, decimal_digits,
+                                                    effective_guard_digits, &result.verify_ms);
+            result.verification_method = "MPFR pre-format scaled-integer check (truncated crown)";
+
             const Timer small_format_timer;
+            mpfr_div_z(pi_scaled, pi_scaled, p10, MPFR_RNDN);
+            mpz_clear(p10);
             result.decimal_prefix = mpfr_to_decimal_prefix(pi_scaled, decimal_digits);
             result.format_ms = small_format_timer.wall_ms();
             result.wall_ms = timer.wall_ms();
             result.cpu_ms = timer.cpu_ms();
-            const Timer small_verify_timer;
-            result.verified = decimal_prefix_matches_pi(result.decimal_prefix, decimal_digits,
-                                                        effective_guard_digits);
-            result.verify_ms = small_verify_timer.wall_ms();
-            result.verification_method = "MPFR const_pi prefix (truncated crown)";
             mpfr_clear(q);
             mpfr_clear(t);
             mpfr_clear(scale_constant);
@@ -298,6 +303,9 @@ class ChudnovskyCrownAlgorithm final : public PiAlgorithm {
         }
         result.finalize_ms = finalize_timer.wall_ms();
 
+        result.verified = verify_scaled_pi_mpfr(pi_scaled, decimal_digits, effective_guard_digits,
+                                                &result.verify_ms);
+
         const Timer format_timer;
         bool spliced = false;
         if (prefix_pipeline) {
@@ -336,19 +344,10 @@ class ChudnovskyCrownAlgorithm final : public PiAlgorithm {
         result.format_ms = format_timer.wall_ms();
         result.wall_ms = timer.wall_ms();
         result.cpu_ms = timer.cpu_ms();
-        const Timer verify_timer;
-        result.verified = decimal_prefix_matches_pi(result.decimal_prefix, decimal_digits,
-                                                    effective_guard_digits);
-        double residue_ms = 0.0;
-        if (result.verified) {
-            result.verified = verify_decimal_prefix_residues(result.decimal_prefix, decimal_digits,
-                                                               &residue_ms);
-        }
-        result.verify_ms = verify_timer.wall_ms() + residue_ms;
         result.total_cost_ms = result.wall_ms + result.verify_ms;
         {
             std::ostringstream method;
-            method << "MPFR const_pi prefix + residues (truncated crown; chunks "
+            method << "MPFR pre-format scaled-integer check (truncated crown; chunks "
                    << std::fixed << std::setprecision(3) << crown_stats.chunk_ms
                    << "ms, merge " << crown_stats.merge_ms << "ms)";
             result.verification_method = method.str();

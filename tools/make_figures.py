@@ -11,10 +11,12 @@ from pathlib import Path
 from typing import Callable, Iterable
 
 
+# Sparse hex-digit extraction is not comparable to full-prefix pi computation.
+PERFORMANCE_EXCLUDE = {"bbp_hex_extract"}
+
 PALETTE = {
     "chudnovsky_naive": "#64748b",
     "chudnovsky_recurrence": "#94a3b8",
-    "bbp_hex_extract": "#334155",
     "chudnovsky_bs": "#2155d9",
     "chudnovsky_bs_valuation": "#0891b2",
     "chudnovsky_bs_crown": "#dc2626",
@@ -32,7 +34,6 @@ PALETTE = {
 LABELS = {
     "chudnovsky_naive": "Chudnovsky naive",
     "chudnovsky_recurrence": "Chudnovsky recurrence",
-    "bbp_hex_extract": "BBP hex extract",
     "chudnovsky_bs": "Chudnovsky BS",
     "chudnovsky_bs_valuation": "Chudnovsky valuation",
     "chudnovsky_bs_crown": "Truncated crown (ours)",
@@ -77,7 +78,8 @@ def load_rows(path: Path) -> list[dict[str, object]]:
             row["mul_bit_volume"] = float(str(raw.get("mul_bit_volume", 0) or 0))
             row["digits_per_sec"] = float(str(raw.get("digits_per_sec", 0) or 0))
             row["digits_per_joule"] = float(str(raw.get("digits_per_joule", 0) or 0))
-            rows.append(row)
+            if row["algorithm"] not in PERFORMANCE_EXCLUDE:
+                rows.append(row)
     return rows
 
 

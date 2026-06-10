@@ -25,12 +25,18 @@ Publishable runs use `10^5, 10^6, 10^7, 10^8` decimal digits. Smoke tests may us
 | Layer | Algorithm key | Role |
 |---|---|---|
 | 1 | `chudnovsky_naive` | Term-by-term summation cliff (capped at 10^5) |
-| 2 | `chudnovsky_recurrence` | Blocked recurrence without binary tree |
+| 2 | `chudnovsky_recurrence` | Blocked recurrence without binary tree (capped at 10^4) |
 | 2 | `chudnovsky_bs` | Serious Chudnovsky binary-splitting baseline |
 | 3 | `ramanujan_classic_bs` | Convergence comparison |
-| 4 | `bbp_hex_extract` | BBP hex spot-check / verification baseline |
 
 SATO-X stack: `chudnovsky_bs_valuation`, `chudnovsky_bs_crown`, `chudnovsky_bs_crown_tuned`.
+
+## BBP verification (not benchmarked)
+
+The Bailey–Borwein–Plouffe hex-digit extractor (`satox/bbp.hpp`) publishes known spot
+checks in `results/summary.md`. It is **not** included in default benchmark runs:
+sparse hex extraction is not comparable to full-prefix π computation on digits/sec or
+relative wall time.
 
 ## Per-run logging
 

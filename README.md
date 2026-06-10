@@ -10,9 +10,11 @@ Cost(D) = T_series + T_bigint + T_sqrt/div + T_radix + T_verify + T_I/O
 with efficiency reported as `(seconds × watts × bytes moved) / verified digits`,
 plus digits/sec, digits/joule, digits/GB, and verified digits/$.
 
-Four baseline layers anchor the ladder: naive Chudnovsky summation,
-binary-splitting Chudnovsky, Ramanujan series, and BBP hex extraction (verification
-baseline). SATO-X crown variants sit on top with ablation support. Protocol:
+Three baseline layers anchor the ladder: naive Chudnovsky summation,
+binary-splitting Chudnovsky, and Ramanujan series. SATO-X crown variants sit on
+top with ablation support. BBP hex spot checks (`satox/bbp.hpp`) are published in
+the benchmark summary for independent verification but are not timed against full
+prefix algorithms. Protocol:
 [`docs/benchmark-protocol.md`](docs/benchmark-protocol.md). Methods:
 [`docs/methods-comparison.md`](docs/methods-comparison.md). Paper:
 [`docs/PAPER.md`](docs/PAPER.md).
@@ -186,8 +188,7 @@ bin/satox-bench --ablation no_binary_split --digits 100000 --algorithms chudnovs
 ## Implemented Algorithms
 
 - `chudnovsky_naive`: term-by-term Chudnovsky (capped at 10^5).
-- `chudnovsky_recurrence`: blocked recurrence without binary tree (capped at 10^5).
-- `bbp_hex_extract`: BBP hex digit extraction verification baseline.
+- `chudnovsky_recurrence`: blocked recurrence without binary tree (capped at 10^4).
 - `chudnovsky_bs`: Chudnovsky binary splitting baseline.
 - `chudnovsky_bs_valuation`: Chudnovsky with opt-in leaf valuation
   cancellation to reduce operand growth.
@@ -203,9 +204,11 @@ bin/satox-bench --ablation no_binary_split --digits 100000 --algorithms chudnovs
   H12 additionally splices the decimal output: the high half of the digits is
   rendered concurrently with the Newton correction (which provably cannot
   change it, enforced by an integer range check with a re-render fallback).
-  Verified at all benchmark sizes; ~2.4x faster than `chudnovsky_bs` at
-  10^6 digits and ~2.9x at 10^5 on this machine. The hypothesis-by-hypothesis
-  derivation, including refuted attempts, is in `docs/research-log.md`.
+  H13 adds pre-format scaled-integer verification (one `mpfr_const_pi` at
+  `V = min(D, 10^6)` instead of five redundant full-precision round-trips).
+  Verified through 10^8 digits; ~3.6x faster than `chudnovsky_bs` at 10^6
+  total cost on this machine. Hypothesis ledger (H1–H13) and H14+ frontier
+  sketches are in `docs/research-log.md`.
 - `chudnovsky_bs_crown_tuned`: the same kernel driven by the cached autotune
   profile (only listed when `results/tuning.json` exists).
 - `ramanujan_classic_bs`: classical Ramanujan series with binary splitting.

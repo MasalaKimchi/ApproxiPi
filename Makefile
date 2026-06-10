@@ -75,7 +75,7 @@ smoke: bin/satox-bench
 
 smoke-engineering: bin/satox-bench | results
 	./bin/satox-bench --digits 1000 --guard 25 --trials 1 --out results \
-		--algorithms chudnovsky_naive,chudnovsky_recurrence,chudnovsky_bs,bbp_hex_extract \
+		--algorithms chudnovsky_naive,chudnovsky_recurrence,chudnovsky_bs \
 		--ablation no_residues --skip-memory-guard
 
 ablation: bin/satox-bench | results

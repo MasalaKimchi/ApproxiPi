@@ -1,7 +1,6 @@
 #include "satox/chudnovsky_common.hpp"
 
 #include "satox/format.hpp"
-#include "satox/residue_verify.hpp"
 #include "satox/run_config.hpp"
 #include "satox/timer.hpp"
 #include "satox/verification.hpp"
@@ -64,22 +63,15 @@ ChudnovskyFinalizeResult finalize_chudnovsky_pi(const HypergeometricBsResult &no
     out.sqrt_div_ms += finalize_timer.wall_ms() - sqrt_timer.wall_ms();
     out.finalize_ms = finalize_timer.wall_ms();
 
+    out.verified = verify_unscaled_pi_mpfr(pi, decimal_digits, effective_guard_digits,
+                                           &out.verify_ms);
+
     const Timer format_timer;
     out.decimal_prefix =
         streaming_format ? mpfr_to_decimal_prefix_streaming(pi, decimal_digits)
                          : mpfr_to_decimal_prefix(pi, decimal_digits);
     out.format_ms = format_timer.wall_ms();
-
-    const Timer verify_timer;
-    out.verified =
-        decimal_prefix_matches_pi(out.decimal_prefix, decimal_digits, effective_guard_digits);
-    double residue_ms = 0.0;
-    if (out.verified) {
-        out.verified =
-            verify_decimal_prefix_residues(out.decimal_prefix, decimal_digits, &residue_ms);
-    }
-    out.verify_ms = verify_timer.wall_ms() + residue_ms;
-    out.verification_method = "MPFR const_pi prefix + modular residues";
+    out.verification_method = "MPFR pre-format scaled-integer check";
 
     mpfr_clear(q);
     mpfr_clear(t);

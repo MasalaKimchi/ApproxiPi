@@ -38,6 +38,16 @@ void test_invalid_inputs() {
     assert(!negative_guard.error.empty());
 }
 
+void test_unified_verification() {
+    auto chudnovsky = satox::make_chudnovsky_algorithm();
+    const satox::ComputeResult result = chudnovsky->compute(5000, 25);
+    assert(result.verified);
+    double elapsed = 0.0;
+    assert(satox::verify_pi_decimal_prefix(result.decimal_prefix, 5000, 25, true, &elapsed));
+    assert(satox::decimal_prefix_matches_pi(result.decimal_prefix, 5000, 25));
+    assert(!satox::verify_pi_decimal_prefix("3.14", 5000, 25, false, nullptr));
+}
+
 void test_bbp_spots() {
     assert(satox::bbp_hex_digits(0, 8) == "243f6a88");
     assert(satox::bbp_hex_digits(10, 8) == "a308d313");
@@ -131,6 +141,7 @@ int main() {
     test_naive_matches_bs();
     test_bbp_algorithm();
     test_csv_schema_extended();
+    test_unified_verification();
     test_invalid_inputs();
     test_bbp_spots();
     test_candidate_metadata();

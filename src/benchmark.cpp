@@ -33,7 +33,6 @@ std::vector<std::unique_ptr<PiAlgorithm>> make_default_algorithms() {
         algorithms.push_back(make_chudnovsky_crown_tuned_algorithm());
     }
     algorithms.push_back(make_ramanujan_algorithm());
-    algorithms.push_back(make_bbp_hex_extract_algorithm());
     algorithms.push_back(make_machin_algorithm());
     algorithms.push_back(make_agm_algorithm());
     algorithms.push_back(make_borwein_cubic_algorithm());

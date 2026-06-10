@@ -13,6 +13,9 @@ BBP_CHECKS = [
     (100, "29b7c97c"),
 ]
 
+# Sparse hex-digit extraction is not comparable to full-prefix pi computation.
+PERFORMANCE_EXCLUDE = {"bbp_hex_extract"}
+
 
 def row_key(row: dict[str, str]) -> tuple[str, str, str]:
     return (row["algorithm"], row["digits"], row.get("notes") or "")
@@ -64,6 +67,8 @@ def write_summary(rows: list[dict[str, str]], output: Path, guard_digits: str = 
     ]
 
     for row in rows:
+        if row["algorithm"] in PERFORMANCE_EXCLUDE:
+            continue
         peak_mib = float(row.get("peak_rss_bytes") or 0) / (1024 * 1024)
         rw_gb = (float(row.get("bytes_read") or 0) + float(row.get("bytes_written") or 0)) / 1e9
         notes = row.get("notes") or row.get("error") or ""

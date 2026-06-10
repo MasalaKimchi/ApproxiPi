@@ -8,6 +8,9 @@ import csv
 from pathlib import Path
 
 
+# Sparse hex-digit extraction is not comparable to full-prefix pi computation.
+PERFORMANCE_EXCLUDE = {"bbp_hex_extract"}
+
 CORE_METHODS = [
     "chudnovsky_naive",
     "chudnovsky_recurrence",
@@ -16,7 +19,6 @@ CORE_METHODS = [
     "chudnovsky_bs_crown",
     "chudnovsky_bs_crown_tuned",
     "ramanujan_classic_bs",
-    "bbp_hex_extract",
     "mpfr_const_pi",
     "arb_const_pi",
 ]
@@ -33,7 +35,7 @@ def main() -> None:
     parser.add_argument("--output", default="results/efficiency.md")
     args = parser.parse_args()
 
-    rows = load_rows(Path(args.input))
+    rows = [r for r in load_rows(Path(args.input)) if r["algorithm"] not in PERFORMANCE_EXCLUDE]
     by_key = {(r["algorithm"], r["digits"]): r for r in rows}
 
     lines = [

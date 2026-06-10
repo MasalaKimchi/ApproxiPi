@@ -33,7 +33,8 @@ class ChudnovskyNaiveAlgorithm final : public PiAlgorithm {
             return result;
         }
         if (decimal_digits > result.metadata.max_digits) {
-            result.error = "naive summation capped at 100000 digits";
+            result.error =
+                "naive summation capped at " + std::to_string(kNaiveMaxDigits) + " digits";
             return result;
         }
         if (!memory_guard_allows(decimal_digits, result.metadata.name, &result.error)) {
@@ -79,8 +80,8 @@ class ChudnovskyNaiveAlgorithm final : public PiAlgorithm {
 class ChudnovskyRecurrenceAlgorithm final : public PiAlgorithm {
   public:
     AlgorithmMetadata metadata() const override {
-        return {"chudnovsky_recurrence", "baseline / blocked recurrence summation", 1, 10000, true,
-                false};
+        return {"chudnovsky_recurrence", "baseline / blocked recurrence summation", 1,
+                kRecurrenceMaxDigits, true, false};
     }
 
     ComputeResult compute(int decimal_digits, int guard_digits) const override {
@@ -95,7 +96,8 @@ class ChudnovskyRecurrenceAlgorithm final : public PiAlgorithm {
             return result;
         }
         if (decimal_digits > result.metadata.max_digits) {
-            result.error = "recurrence summation capped at 10000 digits";
+            result.error = "recurrence summation capped at " + std::to_string(kRecurrenceMaxDigits) +
+                           " digits";
             return result;
         }
         if (!memory_guard_allows(decimal_digits, result.metadata.name, &result.error)) {

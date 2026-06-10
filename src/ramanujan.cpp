@@ -4,7 +4,6 @@
 #include "satox/format.hpp"
 #include "satox/limits.hpp"
 #include "satox/memory_estimate.hpp"
-#include "satox/residue_verify.hpp"
 #include "satox/run_config.hpp"
 #include "satox/timer.hpp"
 #include "satox/verification.hpp"
@@ -103,22 +102,16 @@ class RamanujanAlgorithm final : public PiAlgorithm {
         mpfr_div(pi, q, denominator, MPFR_RNDN);
         result.finalize_ms = finalize_timer.wall_ms();
 
+        result.verified = verify_unscaled_pi_mpfr(pi, decimal_digits, effective_guard_digits,
+                                                  &result.verify_ms);
+
         const Timer format_timer;
         result.decimal_prefix = mpfr_to_decimal_prefix(pi, decimal_digits);
         result.format_ms = format_timer.wall_ms();
         result.wall_ms = timer.wall_ms();
         result.cpu_ms = timer.cpu_ms();
-        const Timer verify_timer;
-        result.verified = decimal_prefix_matches_pi(result.decimal_prefix, decimal_digits,
-                                                    effective_guard_digits);
-        double residue_ms = 0.0;
-        if (result.verified) {
-            result.verified = verify_decimal_prefix_residues(result.decimal_prefix, decimal_digits,
-                                                               &residue_ms);
-        }
-        result.verify_ms = verify_timer.wall_ms() + residue_ms;
         result.total_cost_ms = result.wall_ms + result.verify_ms;
-        result.verification_method = "MPFR const_pi prefix + modular residues";
+        result.verification_method = "MPFR scaled-integer prefix + modular residues";
 
         mpfr_clears(q, t, denominator, pi, sqrt2, (mpfr_ptr)nullptr);
         return result;

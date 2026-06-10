@@ -15,7 +15,9 @@ verification must still pass.
 | 1,000 | 0.045 ms | 0.045 ms | 1.00 | 0.033 ms | **0.009 ms** | yes |
 | 10,000 | 0.62 ms | 0.54 ms | 0.87 | 0.74 ms | 0.97 ms | yes |
 | 100,000 | 12.11 ms | 4.17 ms | **0.34** | 25.8 ms | 8.81 ms | yes |
-| 1,000,000 | 140.5 ms | 59.3 ms | **0.42** | 458.2 ms | 99.0 ms | yes |
+| 1,000,000 | 322 ms | 104 ms | **0.32** | — | — | yes |
+| 10,000,000 | 5,644 ms | 1,597 ms | **0.28** | — | — | yes |
+| 100,000,000 | 97.4 s | 30.6 s | **0.31** | — | — | yes |
 
 All rows produce byte-identical decimal prefixes (same hash). At and above
 10^5 digits the crown beats both installable external references on this
@@ -64,6 +66,7 @@ were co-dominant and untouched by classical series-side optimizations.
 | H10 | Division-free "digit window" formatting via precomputed reciprocal powers of ten | format halves | format -4 ms but finalize +37 ms: the reciprocal-power table cannot hide under the split because chunks saturate all cores | refuted, reverted |
 | H11 | Autotuning the crown knob space (leaf block, chunk depth, parallel levels, intra-node threshold, root split) via coordinate descent, profile cached to `results/tuning.json` | >=5% wall at 1M | 64.0 -> 62.7 ms (-2%), within run noise; the hand-derived H1-H9 configuration is already a local optimum | refuted (marginal) |
 | H12 | Spliced-prefix formatting: after `pi0 = N*r0`, the Newton correction only perturbs digits below the warm-bits horizon (~557k of 1M), so divmod + high-half rendering run concurrently with the residual/correction products; the corrected low half is recovered by integer subtraction (`low = z_corr - (z0 - low0)`) whose range check 0 <= low < 10^(4w) *proves* the splice exact, with full re-render fallback | 8-12% wall at 1M | wall 64.0 -> 59.9 ms (-6.4%), format 16.0 -> 13.4 ms; verified | confirmed (low end) |
+| H13 | Pre-format scaled-integer verification: compare `floor(pi_computed * 10^V)` to `floor(const_pi * 10^V)` in MPFR before decimal rendering, with `V = min(D, 10^6)` and reference precision capped at `V`; eliminates five redundant `mpfr_const_pi` passes and million-digit decimal round-trips | verify -80% at 1M total; 10^8 must verify | 1M verify 229 -> 11 ms, total 322 -> 104 ms (3.1x vs BS); 10^8 wall 96.3 -> 29.5 s (3.3x), verify 139 s -> 1.1 s, **verified** | confirmed |
 
 ## Error-budget notes (why the truncations are safe)
 
@@ -113,3 +116,21 @@ were co-dominant and untouched by classical series-side optimizations.
    y-cruncher. The H7 root-Q elision, H4/H12 warm-Newton + spliced-prefix
    pipeline appear to be less commonly documented; novelty claims should be
    limited accordingly.
+
+## H14+ frontier (not yet attempted)
+
+H13 closed the verification cliff through 10^8 digits. The crown compute path
+is now the binding constraint at scale; knob sweeps (H11) are exhausted.
+Plausible next hypotheses, each needing a predicted effect size and falsifier:
+
+| # | Hypothesis sketch | Why it might matter | Risk |
+|---|---|---|---|
+| H14 | Hybrid router: `arb_const_pi` below ~10^8, crown at and above (or per-digit crossover table) | FLINT/Arb wins 10^8 on this machine (21.6 s vs 28.2 s crown) while crown dominates 10^5–10^7 | Product complexity; not a single-kernel win |
+| H15 | Crown merge restructuring at 10^7+: deeper truncation into the exact-chunk layer when merge > chunks | Merge is ~40% of crown wall at 10^7; bit-volume savings were only ~7% in H1 | May oversubscribe cores (cf. refuted H9b) |
+| H16 | Independent BBP hex spot checks in parallel with H13 MPFR verify | Cheap entropy cross-check; catches bugs H13 cannot | Adds harness complexity; spots are sparse |
+| H17 | New Ramanujan–Sato formula with higher digits/term than Chudnovsky | Only path to beat Chudnovsky asymptotics; `satox-score` has no promote candidate yet | Research-heavy; proof certificate required |
+| H18 | Energy / $ efficiency instrumentation (RAPL, `powermetrics`) | Efficiency table columns are zero today; publish digits/J and verified digits/$ | Platform-dependent; not wall-time |
+
+**Do not expect** another 2x from crown knob tuning alone. The next wall-time
+wins likely require either a different algorithm family (H14/H17) or a new
+binding-constraint diagnosis on the merge/chunk phase at 10^7+ (H15).
