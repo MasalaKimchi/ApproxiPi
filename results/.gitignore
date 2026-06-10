@@ -1,0 +1,4 @@
+# Ephemeral benchmark artifacts (canonical outputs live in this directory root).
+tmp_pi_prefix.txt
+.benchmark_fragment.csv
+checkpoints/

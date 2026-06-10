@@ -2,6 +2,10 @@
 
 #include "satox/binary_splitting.hpp"
 #include "satox/format.hpp"
+#include "satox/limits.hpp"
+#include "satox/memory_estimate.hpp"
+#include "satox/residue_verify.hpp"
+#include "satox/run_config.hpp"
 #include "satox/timer.hpp"
 #include "satox/verification.hpp"
 
@@ -31,7 +35,8 @@ HypergeometricBsSpec ramanujan_spec() {
 class RamanujanAlgorithm final : public PiAlgorithm {
   public:
     AlgorithmMetadata metadata() const override {
-        return {"ramanujan_classic_bs", "Ramanujan classical binary splitting", 1, 1000000,
+        return {"ramanujan_classic_bs", "Ramanujan classical binary splitting", 1,
+                kMaxBenchmarkDigits,
                 true, false};
     }
 
@@ -49,8 +54,12 @@ class RamanujanAlgorithm final : public PiAlgorithm {
             result.error = "requested precision exceeds algorithm max_digits";
             return result;
         }
+        if (!memory_guard_allows(decimal_digits, result.metadata.name, &result.error)) {
+            return result;
+        }
 
         result.supported = true;
+        result.notes = global_run_config().ablation_tag;
         const int effective_guard_digits = guard_digits + 128;
         const Timer timer;
         const unsigned long terms =
@@ -66,6 +75,8 @@ class RamanujanAlgorithm final : public PiAlgorithm {
         const Timer split_timer;
         binary_split_hypergeometric(spec, 0, terms, node, &bs_stats, parallel_depth);
         result.split_ms = split_timer.wall_ms();
+        result.series_ms = bs_stats.series_ms;
+        result.bigint_ms = bs_stats.bigint_ms;
         result.gcd_reductions = bs_stats.gcd_reductions;
         result.cancelled_bits = bs_stats.cancelled_bits;
         result.max_operand_bits = bs_stats.max_operand_bits;
@@ -100,8 +111,14 @@ class RamanujanAlgorithm final : public PiAlgorithm {
         const Timer verify_timer;
         result.verified = decimal_prefix_matches_pi(result.decimal_prefix, decimal_digits,
                                                     effective_guard_digits);
-        result.verify_ms = verify_timer.wall_ms();
-        result.verification_method = "MPFR const_pi prefix";
+        double residue_ms = 0.0;
+        if (result.verified) {
+            result.verified = verify_decimal_prefix_residues(result.decimal_prefix, decimal_digits,
+                                                               &residue_ms);
+        }
+        result.verify_ms = verify_timer.wall_ms() + residue_ms;
+        result.total_cost_ms = result.wall_ms + result.verify_ms;
+        result.verification_method = "MPFR const_pi prefix + modular residues";
 
         mpfr_clears(q, t, denominator, pi, sqrt2, (mpfr_ptr)nullptr);
         return result;

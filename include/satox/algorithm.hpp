@@ -26,24 +26,37 @@ struct ComputeResult {
     std::string verification_method;
     std::string decimal_prefix;
     std::string error;
+    std::string notes;
     std::uint64_t terms_or_iterations = 0;
     double estimated_digits_per_term = 0.0;
     double wall_ms = 0.0;
     double cpu_ms = 0.0;
+    double total_cost_ms = 0.0;
     double split_ms = 0.0;
     double finalize_ms = 0.0;
     double format_ms = 0.0;
     double verify_ms = 0.0;
+    double series_ms = 0.0;
+    double bigint_ms = 0.0;
+    double sqrt_div_ms = 0.0;
+    double io_ms = 0.0;
     std::uint64_t gcd_reductions = 0;
     double cancelled_bits = 0.0;
     std::uint64_t max_operand_bits = 0;
     unsigned int parallel_depth = 0;
-    // Machine-independent series-evaluation work: each multiplication in the
-    // split phase (and, for the crown, the numerator products it moves into
-    // finalize) contributes bits(a) + bits(b). Zero when the metric does not
-    // apply (non-binary-splitting algorithms, external libraries).
     std::uint64_t mul_count = 0;
     double mul_bit_volume = 0.0;
+    std::uint64_t peak_rss_bytes = 0;
+    std::uint64_t bytes_read = 0;
+    std::uint64_t bytes_written = 0;
+    std::uint64_t alloc_count = 0;
+    double energy_joules = 0.0;
+    double mean_power_watts = 0.0;
+    double digits_per_sec = 0.0;
+    double digits_per_joule = 0.0;
+    double digits_per_gb = 0.0;
+    double efficiency_score = 0.0;
+    double verified_digits_per_dollar = 0.0;
 };
 
 class PiAlgorithm {
@@ -56,6 +69,9 @@ class PiAlgorithm {
 std::vector<std::unique_ptr<PiAlgorithm>> make_default_algorithms();
 
 std::unique_ptr<PiAlgorithm> make_chudnovsky_algorithm();
+std::unique_ptr<PiAlgorithm> make_chudnovsky_naive_algorithm();
+std::unique_ptr<PiAlgorithm> make_chudnovsky_recurrence_algorithm();
+std::unique_ptr<PiAlgorithm> make_bbp_hex_extract_algorithm();
 std::unique_ptr<PiAlgorithm> make_chudnovsky_valuation_algorithm();
 std::unique_ptr<PiAlgorithm> make_chudnovsky_crown_algorithm();
 // Crown variant that loads the autotuned knob profile (results/tuning.json)

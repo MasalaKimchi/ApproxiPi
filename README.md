@@ -1,16 +1,21 @@
-# SATO-X Benchmark MVP
+# SATO-X Engineering Benchmark
 
-SATO-X is a local benchmark harness for comparing pi algorithms under one
-reproducible C++17 + GMP + MPFR environment. The MVP treats Chudnovsky binary
-splitting as the baseline to beat and rejects speed claims for candidate
-formulas until they pass the same verification pipeline.
+SATO-X is a reproducible C++17 + GMP + MPFR harness for **engineering-driven**
+π computation research. The objective is full-pipeline cost:
 
-The repository doubles as the artifact for a case study in AI-driven
-performance engineering: a hypothesis ledger with pre-registered predictions
-and recorded refutations (`docs/research-log.md`) and a paper-style writeup
-(`docs/PAPER.md`). Headline at 10^6 digits on this machine, all rows
-byte-identical and verified: our truncated-crown Chudnovsky runs in 59.3 ms
-vs 99.0 ms for FLINT/Arb `arb_const_pi` and 458 ms for MPFR `mpfr_const_pi`.
+```
+Cost(D) = T_series + T_bigint + T_sqrt/div + T_radix + T_verify + T_I/O
+```
+
+with efficiency reported as `(seconds × watts × bytes moved) / verified digits`,
+plus digits/sec, digits/joule, digits/GB, and verified digits/$.
+
+Four baseline layers anchor the ladder: naive Chudnovsky summation,
+binary-splitting Chudnovsky, Ramanujan series, and BBP hex extraction (verification
+baseline). SATO-X crown variants sit on top with ablation support. Protocol:
+[`docs/benchmark-protocol.md`](docs/benchmark-protocol.md). Methods:
+[`docs/methods-comparison.md`](docs/methods-comparison.md). Paper:
+[`docs/PAPER.md`](docs/PAPER.md).
 
 ## Build
 
@@ -37,13 +42,22 @@ make smoke
 Outputs are written to:
 
 - `results/benchmark.csv`
+- `results/trials.csv`
+- `results/run-manifest.json`
 - `results/benchmark.json`
 - `results/summary.md`
+- `results/efficiency.md` (after `make figures`)
+
+## Engineering smoke
+
+```sh
+make smoke-engineering
+```
 
 ## Full Default Benchmark
 
 ```sh
-./bin/satox-bench --digits 1000,10000,100000,1000000 --guard 25 --out results
+./bin/satox-bench --digits 100000,1000000,10000000,100000000 --guard 25 --out results --skip-memory-guard
 ```
 
 Machin and AGM intentionally cap at `100000` digits in v1. The binary-splitting
@@ -149,8 +163,19 @@ For per-method formulae, convergence rates, and benchmark interpretation, see
 [`docs/methods-comparison.md`](docs/methods-comparison.md) and the annotated
 figure gallery at [`docs/figures/index.md`](docs/figures/index.md).
 
+## Ablation matrix
+
+```sh
+make ablation   # merges ablation rows into results/benchmark.csv
+bin/satox-bench --ablation no_gcd --digits 100000 --algorithms chudnovsky_bs --out results --merge
+bin/satox-bench --ablation no_binary_split --digits 100000 --algorithms chudnovsky_bs --out results --merge
+```
+
 ## Implemented Algorithms
 
+- `chudnovsky_naive`: term-by-term Chudnovsky (capped at 10^5).
+- `chudnovsky_recurrence`: blocked recurrence without binary tree (capped at 10^5).
+- `bbp_hex_extract`: BBP hex digit extraction verification baseline.
 - `chudnovsky_bs`: Chudnovsky binary splitting baseline.
 - `chudnovsky_bs_valuation`: Chudnovsky with opt-in leaf valuation
   cancellation to reduce operand growth.

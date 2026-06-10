@@ -1,5 +1,7 @@
 #pragma once
 
+#include "satox/run_config.hpp"
+
 #include <gmp.h>
 
 #include <string>
@@ -46,11 +48,10 @@ struct BinarySplittingStats {
     double cancelled_bits = 0.0;
     unsigned long long max_operand_bits = 0;
     unsigned int parallel_depth = 0;
-    // Machine-independent work metric: every multiplication contributes
-    // bits(a) + bits(b). Comparable across variants that share the same
-    // multiplication substrate (GMP/MPFR on this machine).
     unsigned long long mul_count = 0;
     double mul_bit_volume = 0.0;
+    double series_ms = 0.0;
+    double bigint_ms = 0.0;
 };
 
 void binary_split_hypergeometric(const HypergeometricBsSpec &spec, unsigned long a,
@@ -63,6 +64,10 @@ void binary_split_hypergeometric(const HypergeometricBsSpec &spec, unsigned long
 
 void binary_split_hypergeometric(const HypergeometricBsSpec &spec, unsigned long a,
                                  unsigned long b, HypergeometricBsResult &out);
+
+void blocked_leaf_hypergeometric(const HypergeometricBsSpec &spec, unsigned long a,
+                                 unsigned long b, HypergeometricBsResult &out,
+                                 BinarySplittingStats *stats);
 
 unsigned int recommended_parallel_depth(unsigned long terms);
 

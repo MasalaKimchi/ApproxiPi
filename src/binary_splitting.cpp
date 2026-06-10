@@ -1,6 +1,7 @@
 #include "satox/binary_splitting.hpp"
 
 #include <algorithm>
+#include <chrono>
 #include <future>
 #include <stdexcept>
 #include <thread>
@@ -13,13 +14,21 @@ constexpr unsigned int kMaxParallelDepth = 4;
 
 // Records one multiplication out = a * b in the machine-independent work
 // metric (sum of operand bit sizes). Called before the product is formed.
+using Clock = std::chrono::steady_clock;
+
+inline double elapsed_ms(Clock::time_point start) {
+    return std::chrono::duration<double, std::milli>(Clock::now() - start).count();
+}
+
 inline void count_mul(BinarySplittingStats *stats, const mpz_t a, const mpz_t b) {
     if (stats == nullptr) {
         return;
     }
+    const auto t0 = Clock::now();
     ++stats->mul_count;
     stats->mul_bit_volume +=
         static_cast<double>(mpz_sizeinbase(a, 2)) + static_cast<double>(mpz_sizeinbase(b, 2));
+    stats->bigint_ms += elapsed_ms(t0);
 }
 
 void set_linear_product(mpz_t out, const std::vector<LinearFactor> &factors, unsigned long n) {
@@ -102,10 +111,13 @@ void merge_stats(BinarySplittingStats *target, const BinarySplittingStats &sourc
     target->parallel_depth = std::max(target->parallel_depth, source.parallel_depth);
     target->mul_count += source.mul_count;
     target->mul_bit_volume += source.mul_bit_volume;
+    target->series_ms += source.series_ms;
+    target->bigint_ms += source.bigint_ms;
 }
 
 void set_leaf(const HypergeometricBsSpec &spec, unsigned long n, HypergeometricBsResult &out,
               BinarySplittingStats *stats) {
+    const auto t0 = Clock::now();
     if (n == 0 && spec.unit_first_p) {
         mpz_set_ui(out.p, 1ul);
     } else {
@@ -138,6 +150,9 @@ void set_leaf(const HypergeometricBsSpec &spec, unsigned long n, HypergeometricB
         reduce_common_pqt(out, stats);
     }
     update_max_operand_bits(out, stats);
+    if (stats != nullptr) {
+        stats->series_ms += elapsed_ms(t0);
+    }
 }
 
 void combine_nodes(const HypergeometricBsSpec &spec, const HypergeometricBsResult &left,
@@ -237,11 +252,32 @@ void binary_split_hypergeometric(const HypergeometricBsSpec &spec, unsigned long
     binary_split_hypergeometric(spec, a, b, out, stats, 0);
 }
 
+void blocked_leaf_hypergeometric(const HypergeometricBsSpec &spec, unsigned long a,
+                                 unsigned long b, HypergeometricBsResult &out,
+                                 BinarySplittingStats *stats) {
+    if (b <= a) {
+        throw std::invalid_argument("blocked_leaf_hypergeometric requires b > a");
+    }
+    set_leaf(spec, a, out, stats);
+    if (b - a > 1) {
+        HypergeometricBsResult leaf;
+        for (unsigned long n = a + 1; n < b; ++n) {
+            set_leaf(spec, n, leaf, stats);
+            append_leaf(spec, out, leaf, stats);
+        }
+    }
+}
+
 void binary_split_hypergeometric(const HypergeometricBsSpec &spec, unsigned long a,
                                  unsigned long b, HypergeometricBsResult &out,
                                  BinarySplittingStats *stats, unsigned int parallel_depth) {
     if (stats != nullptr) {
         stats->parallel_depth = parallel_depth;
+    }
+    const RunConfig &cfg = global_run_config();
+    if (cfg.split_mode_set && cfg.split_mode_override == SplitMode::BlockedLeaf) {
+        blocked_leaf_hypergeometric(spec, a, b, out, stats);
+        return;
     }
     binary_split_hypergeometric_impl(spec, a, b, out, stats, parallel_depth);
 }
@@ -252,6 +288,14 @@ void binary_split_hypergeometric(const HypergeometricBsSpec &spec, unsigned long
 }
 
 unsigned int recommended_parallel_depth(unsigned long terms) {
+    const RunConfig &cfg = global_run_config();
+    if (cfg.threads_override >= 0) {
+        unsigned int depth = 0;
+        while ((1u << (depth + 1u)) <= static_cast<unsigned int>(cfg.threads_override)) {
+            ++depth;
+        }
+        return std::min(depth, kMaxParallelDepth);
+    }
     const unsigned int workers = std::max(1u, std::thread::hardware_concurrency());
     unsigned int depth = 0;
     while (depth < kMaxParallelDepth && (1u << depth) < workers &&

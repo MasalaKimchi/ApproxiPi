@@ -6,6 +6,7 @@
 #include "satox/algorithm.hpp"
 
 #include "satox/format.hpp"
+#include "satox/limits.hpp"
 #include "satox/timer.hpp"
 #include "satox/verification.hpp"
 
@@ -26,7 +27,7 @@ class MpfrConstPiAlgorithm final : public PiAlgorithm {
   public:
     AlgorithmMetadata metadata() const override {
         return {"mpfr_const_pi", "MPFR mpfr_const_pi (cold cache, single-threaded)", 1,
-                1000000, true, false};
+                kMaxBenchmarkDigits, true, false};
     }
 
     ComputeResult compute(int decimal_digits, int guard_digits) const override {
@@ -82,7 +83,7 @@ class MpfrConstPiAlgorithm final : public PiAlgorithm {
 class ArbConstPiAlgorithm final : public PiAlgorithm {
   public:
     AlgorithmMetadata metadata() const override {
-        return {"arb_const_pi", "FLINT/Arb arb_const_pi (cold cache)", 1, 1000000, true,
+        return {"arb_const_pi", "FLINT/Arb arb_const_pi (cold cache)", 1, kMaxBenchmarkDigits, true,
                 false};
     }
 
@@ -146,7 +147,7 @@ class ArbConstPiAlgorithm final : public PiAlgorithm {
 class ArbUnavailableAlgorithm final : public PiAlgorithm {
   public:
     AlgorithmMetadata metadata() const override {
-        return {"arb_const_pi", "FLINT/Arb arb_const_pi (not built)", 1, 1000000, true,
+        return {"arb_const_pi", "FLINT/Arb arb_const_pi (not built)", 1, kMaxBenchmarkDigits, true,
                 false};
     }
 

@@ -9,15 +9,22 @@
 namespace satox {
 
 struct BenchmarkOptions {
-    std::vector<int> digits = {1000, 10000, 100000, 1000000};
+    std::vector<int> digits = {100000, 1000000, 10000000, 100000000};
     int guard_digits = 25;
     int trials = 3;
     int warmups = 0;
+    int timeout_sec = 0;
     std::string output_dir = "results";
     std::string candidate_file;
     std::string formula_dir = "candidates";
-    // Empty means "run every default algorithm"; otherwise only the named ones.
     std::vector<std::string> algorithms;
+    std::string ablation;
+    double electricity_usd_per_kwh = 0.12;
+    double instance_usd_per_hour = 0.0;
+    bool measure_energy = true;
+    bool skip_memory_guard = false;
+    // When true, merge this run into existing results/benchmark.csv instead of replacing it.
+    bool merge = false;
 };
 
 int run_benchmark(const BenchmarkOptions &options);

@@ -3,10 +3,15 @@
 #include "satox/bbp.hpp"
 #include "satox/formula_spec.hpp"
 #include "satox/format.hpp"
+#include "satox/resource_monitor.hpp"
+#include "satox/run_config.hpp"
 
 #include <algorithm>
+#include <chrono>
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <future>
 #include <iomanip>
 #include <iostream>
 #include <cmath>
@@ -18,6 +23,8 @@ namespace satox {
 
 std::vector<std::unique_ptr<PiAlgorithm>> make_default_algorithms() {
     std::vector<std::unique_ptr<PiAlgorithm>> algorithms;
+    algorithms.push_back(make_chudnovsky_naive_algorithm());
+    algorithms.push_back(make_chudnovsky_recurrence_algorithm());
     algorithms.push_back(make_chudnovsky_algorithm());
     algorithms.push_back(make_chudnovsky_valuation_algorithm());
     algorithms.push_back(make_chudnovsky_crown_algorithm());
@@ -26,6 +33,7 @@ std::vector<std::unique_ptr<PiAlgorithm>> make_default_algorithms() {
         algorithms.push_back(make_chudnovsky_crown_tuned_algorithm());
     }
     algorithms.push_back(make_ramanujan_algorithm());
+    algorithms.push_back(make_bbp_hex_extract_algorithm());
     algorithms.push_back(make_machin_algorithm());
     algorithms.push_back(make_agm_algorithm());
     algorithms.push_back(make_borwein_cubic_algorithm());
@@ -37,10 +45,18 @@ std::vector<std::unique_ptr<PiAlgorithm>> make_default_algorithms() {
 
 std::string csv_header() {
     return "algorithm,family,digits,guard_digits,trials,supported,verified,wall_ms,min_wall_ms,"
-           "max_wall_ms,stddev_wall_ms,cpu_ms,split_ms,finalize_ms,format_ms,verify_ms,"
-           "terms_or_iterations,estimated_digits_per_term,gcd_reductions,cancelled_bits,"
-           "max_operand_bits,parallel_depth,mul_count,mul_bit_volume,verification_method,"
-           "baseline,relative_wall_time,prefix_hash,error\n";
+           "max_wall_ms,stddev_wall_ms,total_cost_ms,cpu_ms,split_ms,series_ms,bigint_ms,"
+           "finalize_ms,sqrt_div_ms,format_ms,verify_ms,io_ms,terms_or_iterations,"
+           "estimated_digits_per_term,gcd_reductions,cancelled_bits,max_operand_bits,"
+           "parallel_depth,mul_count,mul_bit_volume,peak_rss_bytes,bytes_read,bytes_written,"
+           "energy_joules,mean_power_watts,digits_per_sec,digits_per_joule,digits_per_gb,"
+           "efficiency_score,verified_digits_per_dollar,verification_method,baseline,"
+           "relative_wall_time,prefix_hash,notes,error\n";
+}
+
+std::string trials_csv_header() {
+    return "algorithm,digits,trial,wall_ms,total_cost_ms,peak_rss_bytes,bytes_read,bytes_written,"
+           "energy_joules,verified,error\n";
 }
 
 std::string result_to_csv(const ComputeResult &result, const std::string &baseline_name,
@@ -66,6 +82,95 @@ std::string result_to_csv(const ComputeResult &result, const std::string &baseli
 }
 
 namespace {
+
+void fill_derived_metrics(ComputeResult &result, const BenchmarkOptions &options) {
+    if (result.total_cost_ms <= 0.0) {
+        result.total_cost_ms = result.wall_ms + result.verify_ms;
+    }
+    if (result.verified && result.total_cost_ms > 0.0) {
+        result.digits_per_sec =
+            static_cast<double>(result.decimal_digits) / (result.total_cost_ms / 1000.0);
+    }
+    if (result.energy_joules > 0.0) {
+        result.digits_per_joule =
+            static_cast<double>(result.decimal_digits) / result.energy_joules;
+    }
+    const std::uint64_t bytes_moved = result.bytes_read + result.bytes_written;
+    if (bytes_moved > 0) {
+        result.digits_per_gb =
+            static_cast<double>(result.decimal_digits) /
+            (static_cast<double>(bytes_moved) / 1e9);
+    }
+    if (result.verified && result.decimal_digits > 0) {
+        const double cost_s = result.total_cost_ms / 1000.0;
+        const double power = result.mean_power_watts > 0.0 ? result.mean_power_watts : 1.0;
+        result.efficiency_score =
+            (cost_s * power * static_cast<double>(bytes_moved)) /
+            static_cast<double>(result.decimal_digits);
+        const double energy_cost =
+            (result.energy_joules / 3.6e6) * options.electricity_usd_per_kwh;
+        const double instance_cost = options.instance_usd_per_hour * (cost_s / 3600.0);
+        const double total_cost = energy_cost + instance_cost;
+        if (total_cost > 0.0) {
+            result.verified_digits_per_dollar =
+                static_cast<double>(result.decimal_digits) / total_cost;
+        }
+    }
+}
+
+ComputeResult run_trial(const PiAlgorithm &algorithm, int digits, int guard_digits,
+                        int timeout_sec) {
+    if (timeout_sec <= 0) {
+        ResourceMonitor monitor;
+        monitor.sample();
+        ComputeResult result = algorithm.compute(digits, guard_digits);
+        monitor.sample();
+        const ResourceSnapshot snap =
+            monitor.finish((result.total_cost_ms > 0.0 ? result.total_cost_ms : result.wall_ms) /
+                           1000.0);
+        result.peak_rss_bytes = snap.peak_rss_bytes;
+        result.bytes_read = snap.bytes_read;
+        result.bytes_written = snap.bytes_written;
+        result.energy_joules = snap.energy_joules;
+        result.mean_power_watts = snap.mean_power_watts;
+        return result;
+    }
+
+    auto future = std::async(std::launch::async, [&]() {
+        return algorithm.compute(digits, guard_digits);
+    });
+    if (future.wait_for(std::chrono::seconds(timeout_sec)) == std::future_status::timeout) {
+        ComputeResult timed_out;
+        timed_out.metadata = algorithm.metadata();
+        timed_out.decimal_digits = digits;
+        timed_out.guard_digits = guard_digits;
+        timed_out.error = "timeout";
+        return timed_out;
+    }
+    ResourceMonitor monitor;
+    monitor.sample();
+    ComputeResult result = future.get();
+    monitor.sample();
+    const ResourceSnapshot snap =
+        monitor.finish((result.total_cost_ms > 0.0 ? result.total_cost_ms : result.wall_ms) /
+                       1000.0);
+    result.peak_rss_bytes = snap.peak_rss_bytes;
+    result.bytes_read = snap.bytes_read;
+    result.bytes_written = snap.bytes_written;
+    result.energy_joules = snap.energy_joules;
+    result.mean_power_watts = snap.mean_power_watts;
+    return result;
+}
+
+std::string trial_to_csv(const ComputeResult &result, int trial) {
+    std::ostringstream out;
+    out << result.metadata.name << ',' << result.decimal_digits << ',' << trial << ','
+        << std::fixed << std::setprecision(3) << result.wall_ms << ',' << result.total_cost_ms
+        << ',' << result.peak_rss_bytes << ',' << result.bytes_read << ','
+        << result.bytes_written << ',' << result.energy_joules << ','
+        << (result.verified ? "true" : "false") << ',' << '"' << result.error << '"' << '\n';
+    return out.str();
+}
 
 struct ResultStats {
     ComputeResult representative;
@@ -163,17 +268,25 @@ std::string stats_to_csv(const ResultStats &stats, const std::string &baseline_n
         << (result.supported ? "true" : "false") << ','
         << (result.verified ? "true" : "false") << ',' << std::fixed
         << std::setprecision(3) << stats.median_wall_ms << ',' << stats.min_wall_ms << ','
-        << stats.max_wall_ms << ',' << stats.stddev_wall_ms << ',' << stats.median_cpu_ms << ','
-        << stats.median_split_ms << ',' << stats.median_finalize_ms << ','
-        << stats.median_format_ms << ',' << stats.median_verify_ms << ','
-        << result.terms_or_iterations << ',' << std::setprecision(6)
+        << stats.max_wall_ms << ',' << stats.stddev_wall_ms << ','
+        << (result.total_cost_ms > 0.0 ? result.total_cost_ms : stats.median_wall_ms +
+                                                                 stats.median_verify_ms)
+        << ',' << stats.median_cpu_ms << ',' << stats.median_split_ms << ','
+        << result.series_ms << ',' << result.bigint_ms << ',' << stats.median_finalize_ms << ','
+        << result.sqrt_div_ms << ',' << stats.median_format_ms << ',' << stats.median_verify_ms
+        << ',' << result.io_ms << ',' << result.terms_or_iterations << ',' << std::setprecision(6)
         << result.estimated_digits_per_term << ',' << result.gcd_reductions << ','
         << std::setprecision(3) << result.cancelled_bits << ',' << result.max_operand_bits << ','
         << result.parallel_depth << ',' << result.mul_count << ',' << std::setprecision(0)
-        << result.mul_bit_volume << std::setprecision(3) << ',' << '"'
+        << result.mul_bit_volume << std::setprecision(3) << ',' << result.peak_rss_bytes << ','
+        << result.bytes_read << ',' << result.bytes_written << ',' << result.energy_joules << ','
+        << result.mean_power_watts << ',' << result.digits_per_sec << ','
+        << result.digits_per_joule << ',' << result.digits_per_gb << ','
+        << result.efficiency_score << ',' << result.verified_digits_per_dollar << ',' << '"'
         << result.verification_method << '"'
         << ',' << baseline_name << ',' << std::setprecision(6) << relative << ','
-        << short_hash(result.decimal_prefix) << ',' << '"' << result.error << '"' << '\n';
+        << short_hash(result.decimal_prefix) << ',' << '"' << result.notes << '"' << ','
+        << '"' << result.error << '"' << '\n';
     return out.str();
 }
 
@@ -219,27 +332,48 @@ std::string result_to_json(const ComputeResult &result, const std::string &basel
 int run_benchmark(const BenchmarkOptions &options) {
     std::filesystem::create_directories(options.output_dir);
 
-    std::ofstream csv(options.output_dir + "/benchmark.csv");
+    RunConfig &cfg = global_run_config();
+    cfg.timeout_sec = options.timeout_sec;
+    cfg.electricity_usd_per_kwh = options.electricity_usd_per_kwh;
+    cfg.instance_usd_per_hour = options.instance_usd_per_hour;
+    cfg.measure_energy = options.measure_energy;
+    cfg.skip_memory_guard = options.skip_memory_guard;
+    if (!options.ablation.empty()) {
+        apply_ablation(options.ablation);
+    }
+
+    std::ofstream manifest(options.output_dir + "/run-manifest.json");
+    if (manifest) {
+        manifest << host_manifest_json(options.electricity_usd_per_kwh,
+                                       options.instance_usd_per_hour);
+    }
+
+    const std::string csv_path =
+        options.merge ? options.output_dir + "/.benchmark_fragment.csv"
+                      : options.output_dir + "/benchmark.csv";
+
+    std::ofstream csv(csv_path);
+    std::ofstream trials_csv(options.output_dir + "/trials.csv",
+                             options.merge ? std::ios::app : std::ios::trunc);
     std::ofstream json(options.output_dir + "/benchmark.json");
     std::ofstream md(options.output_dir + "/summary.md");
-    if (!csv || !json || !md) {
+    if (!csv || !json || !md || !trials_csv) {
         throw std::runtime_error("could not open benchmark output files");
     }
 
     csv << csv_header();
+    if (!options.merge) {
+        trials_csv << trials_csv_header();
+    }
     json << "[\n";
-    md << "# SATO-X Benchmark Summary\n\n";
+    md << "# SATO-X Engineering Benchmark Summary\n\n";
     md << "Guard digits: `" << options.guard_digits << "`\n\n";
     md << "Trials per row: `" << options.trials << "`; warmups: `" << options.warmups << "`\n\n";
-    md << "Optimization notes: shared binary splitting uses bounded parallel subtree "
-          "evaluation, an `mpz_addmul` merge to avoid one temporary large-integer "
-          "product per internal node, small 8-term leaf blocks before recursion, "
-          "opt-in leaf valuation cancellation, and `log10(396^4 / 256)` for "
-          "Ramanujan term-count estimation. Phase "
-          "columns expose split/finalize/format/verify bottlenecks.\n\n";
-    md << "| Digits | Algorithm | Supported | Verified | Median wall ms | Split | Finalize | Format | Verify | Terms/iterations | Max operand bits | Mul Gbit | Parallel depth | "
-          "Relative to Chudnovsky | Notes |\n";
-    md << "|---:|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|\n";
+    md << "Cost model: T_series + T_bigint + T_sqrt/div + T_radix + T_verify + T_I/O. "
+          "Efficiency = (seconds * watts * bytes moved) / verified digits.\n\n";
+    md << "| Digits | Algorithm | Supported | Verified | Runtime ms | Peak RAM MiB | R/W GB | "
+          "Energy J | Digits/sec | Digits/J | Relative | Notes |\n";
+    md << "|---:|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|\n";
 
     bool first_json = true;
     std::vector<std::unique_ptr<PiAlgorithm>> algorithms = make_default_algorithms();
@@ -270,9 +404,14 @@ int run_benchmark(const BenchmarkOptions &options) {
 
             std::vector<ComputeResult> trials;
             for (int i = 0; i < std::max(1, options.trials); ++i) {
-                trials.push_back(algorithm->compute(digits, options.guard_digits));
+                ComputeResult trial =
+                    run_trial(*algorithm, digits, options.guard_digits, options.timeout_sec);
+                fill_derived_metrics(trial, options);
+                trials_csv << trial_to_csv(trial, i + 1);
+                trials.push_back(std::move(trial));
             }
             ResultStats stats = summarize_results(std::move(trials));
+            fill_derived_metrics(stats.representative, options);
             if (stats.representative.metadata.name == baseline_name && stats.representative.verified) {
                 baseline_wall_ms = stats.median_wall_ms;
             }
@@ -292,17 +431,18 @@ int run_benchmark(const BenchmarkOptions &options) {
                 (baseline_wall_ms > 0.0 && result.wall_ms > 0.0)
                     ? result.wall_ms / baseline_wall_ms
                     : 0.0;
+            const double rw_gb =
+                static_cast<double>(result.bytes_read + result.bytes_written) / 1e9;
             md << "| " << digits << " | `" << result.metadata.name << "` | "
                << (result.supported ? "yes" : "no") << " | "
                << (result.verified ? "yes" : "no") << " | " << std::fixed
-               << std::setprecision(3) << stats.median_wall_ms << " | "
-               << stats.median_split_ms << " | " << stats.median_finalize_ms << " | "
-               << stats.median_format_ms << " | " << stats.median_verify_ms << " | "
-               << result.terms_or_iterations << " | " << result.max_operand_bits << " | "
-               << std::setprecision(3) << result.mul_bit_volume / 1e9 << " | "
-               << result.parallel_depth << " | "
-               << std::setprecision(3) << relative
-               << " | " << (result.error.empty() ? "" : result.error) << " |\n";
+               << std::setprecision(3) << result.total_cost_ms << " | "
+               << (result.peak_rss_bytes / (1024.0 * 1024.0)) << " | " << rw_gb << " | "
+               << result.energy_joules << " | " << result.digits_per_sec << " | "
+               << result.digits_per_joule << " | " << relative << " | "
+               << (result.notes.empty() ? (result.error.empty() ? "" : result.error)
+                                        : result.notes)
+               << " |\n";
         }
     }
 
@@ -350,7 +490,20 @@ int run_benchmark(const BenchmarkOptions &options) {
           "compared against the same Chudnovsky baseline.\n";
     json << "\n]\n";
 
-    std::cout << "Wrote " << options.output_dir << "/benchmark.csv, benchmark.json, summary.md\n";
+    if (options.merge) {
+        const std::string existing = options.output_dir + "/benchmark.csv";
+        const std::string merge_cmd =
+            "python3 tools/merge_benchmark_csv.py \"" + existing + "\" \"" + csv_path +
+            "\" --output \"" + existing + "\" --summary \"" + options.output_dir +
+            "/summary.md\"";
+        if (std::system(merge_cmd.c_str()) != 0) {
+            throw std::runtime_error("failed to merge benchmark CSV fragments");
+        }
+        std::filesystem::remove(csv_path);
+    }
+
+    std::cout << "Wrote " << options.output_dir
+              << "/benchmark.csv, trials.csv, benchmark.json, summary.md, run-manifest.json\n";
     return 0;
 }
 

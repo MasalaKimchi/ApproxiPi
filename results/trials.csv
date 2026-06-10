@@ -1,0 +1,5 @@
+algorithm,digits,trial,wall_ms,total_cost_ms,peak_rss_bytes,bytes_read,bytes_written,energy_joules,verified,error
+chudnovsky_naive,1000,1,0.356,0.396,2621440,0,0,0.000,true,""
+chudnovsky_recurrence,1000,1,0.234,0.241,2654208,0,0,0.000,true,""
+chudnovsky_bs,1000,1,0.121,0.127,2736128,0,0,0.000,true,""
+bbp_hex_extract,1000,1,0.026,0.039,2736128,0,0,0.000,true,""

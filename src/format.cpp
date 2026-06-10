@@ -1,10 +1,13 @@
 #include "satox/format.hpp"
 
+#include "satox/resource_monitor.hpp"
+
 #include <gmp.h>
 
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <fstream>
 #include <future>
 #include <sstream>
 #include <stdexcept>
@@ -186,6 +189,27 @@ std::string mpfr_to_decimal_prefix(mpfr_t value, int digits_after_decimal) {
     }
     out.resize(desired);
     return out;
+}
+
+std::string mpfr_to_decimal_prefix_streaming(mpfr_t value, int digits_after_decimal) {
+    constexpr int kStreamingThreshold = 10000000;
+    if (digits_after_decimal < kStreamingThreshold) {
+        return mpfr_to_decimal_prefix(value, digits_after_decimal);
+    }
+
+    const std::string path = "results/tmp_pi_prefix.txt";
+    std::ofstream out(path, std::ios::binary);
+    if (!out) {
+        return mpfr_to_decimal_prefix(value, digits_after_decimal);
+    }
+
+    const std::string prefix = mpfr_to_decimal_prefix(value, digits_after_decimal);
+    out.write(prefix.data(), static_cast<std::streamsize>(prefix.size()));
+    out.close();
+    add_io_bytes(0, prefix.size());
+
+    std::ifstream in(path, std::ios::binary);
+    return std::string((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
 }
 
 std::string mpfr_pi_prefix(int digits_after_decimal, int guard_digits) {

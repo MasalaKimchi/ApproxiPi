@@ -12,6 +12,9 @@ from typing import Callable, Iterable
 
 
 PALETTE = {
+    "chudnovsky_naive": "#64748b",
+    "chudnovsky_recurrence": "#94a3b8",
+    "bbp_hex_extract": "#334155",
     "chudnovsky_bs": "#2155d9",
     "chudnovsky_bs_valuation": "#0891b2",
     "chudnovsky_bs_crown": "#dc2626",
@@ -27,6 +30,9 @@ PALETTE = {
 }
 
 LABELS = {
+    "chudnovsky_naive": "Chudnovsky naive",
+    "chudnovsky_recurrence": "Chudnovsky recurrence",
+    "bbp_hex_extract": "BBP hex extract",
     "chudnovsky_bs": "Chudnovsky BS",
     "chudnovsky_bs_valuation": "Chudnovsky valuation",
     "chudnovsky_bs_crown": "Truncated crown (ours)",
@@ -67,7 +73,10 @@ def load_rows(path: Path) -> list[dict[str, object]]:
             row["split_ms"] = float(str(raw.get("split_ms", 0) or 0))
             row["finalize_ms"] = float(str(raw.get("finalize_ms", 0) or 0))
             row["format_ms"] = float(str(raw.get("format_ms", 0) or 0))
+            row["series_ms"] = float(str(raw.get("series_ms", 0) or 0))
             row["mul_bit_volume"] = float(str(raw.get("mul_bit_volume", 0) or 0))
+            row["digits_per_sec"] = float(str(raw.get("digits_per_sec", 0) or 0))
+            row["digits_per_joule"] = float(str(raw.get("digits_per_joule", 0) or 0))
             rows.append(row)
     return rows
 
@@ -79,6 +88,25 @@ def write(path: Path, svg: str) -> None:
 
 def fmt(value: float) -> str:
     return f"{value:.2f}".rstrip("0").rstrip(".")
+
+
+def format_digit_label(digits: int) -> str:
+    if digits >= 1_000_000:
+        exp = int(round(math.log10(digits)))
+        if abs(10**exp - digits) < max(1, digits // 100):
+            return f"10^{exp}"
+    return f"{digits:,}"
+
+
+def largest_verified_digits(rows: list[dict[str, object]]) -> int:
+    verified = [
+        int(r["digits"])
+        for r in rows
+        if r["supported"] and r["verified"] and float(r["wall_ms"]) > 0
+    ]
+    if verified:
+        return max(verified)
+    return max(int(r["digits"]) for r in rows)
 
 
 def svg_document(width: int, height: int, title: str, desc: str, body: str) -> str:
@@ -106,6 +134,7 @@ def svg_document(width: int, height: int, title: str, desc: str, body: str) -> s
 LEGEND_COLS = 3
 LEGEND_ROW_HEIGHT = 24
 LEGEND_PAD = 20
+LABEL_W = 248
 
 
 def legend_height(count: int, cols: int = LEGEND_COLS) -> int:
@@ -228,7 +257,7 @@ def line_chart(
         parts.append(
             f'<line class="grid" x1="{fmt(x)}" y1="{plot["y0"]}" x2="{fmt(x)}" y2="{plot["y1"]}"/>'
         )
-        label = f"{10**power:,}" if power >= 3 else str(10**power)
+        label = f"10^{power}" if power >= 4 else (f"{10**power:,}" if power >= 3 else str(10**power))
         parts.append(
             f'<text class="tick" x="{fmt(x)}" y="{fmt(plot["y1"] + 22)}" text-anchor="middle">{label}</text>'
         )
@@ -304,37 +333,43 @@ def verification_matrix(rows: list[dict[str, object]], output: Path) -> None:
     algorithms = sorted({str(r["algorithm"]) for r in rows})
     digits = sorted({int(r["digits"]) for r in rows})
     lookup = {(str(r["algorithm"]), int(r["digits"])): r for r in rows}
-    label_w = 210
-    cell_w, cell_h = 132, 44
-    x0 = label_w + 20
+    cell_w = max(96, min(128, int(720 / max(1, len(digits)))))
+    cell_h = 44
+    x0 = LABEL_W + 24
     y0 = 96
     plot_w = len(digits) * cell_w
-    width = x0 + plot_w + 40
+    width = x0 + plot_w + 48
     legend_h = 52
-    height = y0 + len(algorithms) * cell_h + legend_h + 40
+    height = y0 + len(algorithms) * cell_h + legend_h + 48
+    label_x = LABEL_W - 8
     parts = [
         f'<rect width="{width}" height="{height}" fill="#fff"/>',
         '<text class="title" x="40" y="38">Verification matrix</text>',
-        '<text class="subtitle" x="40" y="58">Green = supported and verified; gray = outside v1 precision cap; red = failed.</text>',
+        '<text class="subtitle" x="40" y="58">Green = supported and verified; gray = unsupported cap; red = failed.</text>',
         f'<text class="label" x="{fmt(x0 + plot_w / 2)}" y="84" text-anchor="middle">Decimal digits</text>',
     ]
 
     for col, digit in enumerate(digits):
         x = x0 + col * cell_w + cell_w / 2
-        parts.append(f'<text class="tick" x="{fmt(x)}" y="104" text-anchor="middle">{digit:,}</text>')
+        parts.append(
+            f'<text class="tick" x="{fmt(x)}" y="104" text-anchor="middle">'
+            f"{html.escape(format_digit_label(digit))}</text>"
+        )
 
     for row_index, algorithm in enumerate(algorithms):
         y = y0 + row_index * cell_h + 8
         parts.append(
-            f'<text class="label" x="36" y="{fmt(y + cell_h / 2 + 4)}" '
+            f'<text class="label" x="{label_x}" y="{fmt(y + cell_h / 2 + 4)}" '
             f'text-anchor="end">{html.escape(LABELS.get(algorithm, algorithm))}</text>'
         )
         for col, digit in enumerate(digits):
-            r = lookup[(algorithm, digit)]
+            r = lookup.get((algorithm, digit), {"supported": "false", "verified": "false"})
             x = x0 + col * cell_w + 6
-            if r["supported"] and r["verified"]:
+            supported = r["supported"] in ("true", True)
+            verified = r["verified"] in ("true", True)
+            if supported and verified:
                 fill, label = OK, "OK"
-            elif not r["supported"]:
+            elif not supported:
                 fill, label = SKIP, "skip"
             else:
                 fill, label = FAIL, "fail"
@@ -379,23 +414,24 @@ def phase_breakdown(rows: list[dict[str, object]], digits: int, output: Path) ->
         return
     phases = [("split_ms", "#2155d9"), ("finalize_ms", "#dc2626"), ("format_ms", "#f59e0b")]
     phase_names = ["series / split", "finalize", "format"]
-    label_w = 210
-    x0 = label_w + 20
+    x0 = LABEL_W + 24
     bar_h, gap = 32, 14
     plot_w = 620
     legend_h = 48
-    width = x0 + plot_w + 120
-    height = 110 + len(usable) * (bar_h + gap) + legend_h + 24
+    right_pad = 140
+    width = x0 + plot_w + right_pad
+    height = 110 + len(usable) * (bar_h + gap) + legend_h + 32
     max_wall = max(float(r["wall_ms"]) for r in usable)
+    label_x = LABEL_W - 8
 
     parts = [
         f'<rect width="{width}" height="{height}" fill="#fff"/>',
-        f'<text class="title" x="40" y="38">Phase breakdown at {digits:,} digits</text>',
+        f'<text class="title" x="40" y="38">Phase breakdown at {format_digit_label(digits)} digits</text>',
         '<text class="subtitle" x="40" y="58">Stacked bars show split, finalize, and format; '
         "light gray is remaining overhead.</text>",
     ]
 
-    legend_y = height - legend_h - 8
+    legend_y = height - legend_h - 12
     parts.append(f'<rect class="legend-box" x="36" y="{legend_y}" width="{width - 72}" height="36" rx="8"/>')
     for i, (name, color) in enumerate(zip(phase_names, [c for _, c in phases])):
         lx = 56 + i * 200
@@ -411,7 +447,7 @@ def phase_breakdown(rows: list[dict[str, object]], digits: int, output: Path) ->
         total = float(r["wall_ms"])
         label = LABELS.get(str(r["algorithm"]), str(r["algorithm"]))
         parts.append(
-            f'<text class="label" x="36" y="{fmt(y + bar_h / 2 + 4)}" text-anchor="end">{html.escape(label)}</text>'
+            f'<text class="label" x="{label_x}" y="{fmt(y + bar_h / 2 + 4)}" text-anchor="end">{html.escape(label)}</text>'
         )
         total_w = total / max_wall * plot_w
         parts.append(
@@ -508,16 +544,20 @@ def hypothesis_progression(output: Path) -> None:
     # Numbered legend below with full hypothesis names and descriptions.
     rows = math.ceil(n / 2)
     box_h = LEGEND_PAD * 2 + rows * LEGEND_ROW_HEIGHT
-    parts.append(f'<rect class="legend-box" x="36" y="{legend_y}" width="930" height="{box_h}" rx="8"/>')
-    col_w = 450
+    legend_box_w = width - 72
+    parts.append(f'<rect class="legend-box" x="36" y="{legend_y}" width="{legend_box_w}" height="{box_h}" rx="8"/>')
+    col_w = (legend_box_w - 32) / 2
     for i, (name, wall, desc) in enumerate(HYPOTHESIS_TIMELINE):
         col = i // rows
         row = i % rows
-        x = 52 + col * col_w
+        x = 52 + col * (col_w + 16)
         y = legend_y + LEGEND_PAD + row * LEGEND_ROW_HEIGHT + 4
-        parts.append(f'<text class="legend" x="{fmt(x)}" y="{fmt(y)}">'
-                     f'<tspan font-weight="700">{i + 1}.</tspan> {html.escape(name)} '
-                     f'({fmt(wall)} ms) — {html.escape(desc)}</text>')
+        short_desc = desc if len(desc) <= 34 else desc[:31] + "..."
+        parts.append(
+            f'<text class="legend" x="{fmt(x)}" y="{fmt(y)}">'
+            f'<tspan font-weight="700">{i + 1}.</tspan> {html.escape(name)} '
+            f"({fmt(wall)} ms) — {html.escape(short_desc)}</text>"
+        )
 
     write(
         output,
@@ -587,6 +627,14 @@ Wall-time improvements from the optimization hypothesis sequence. Numbered stage
 Green cells passed full-prefix verification; gray cells exceed the algorithm's precision cap.
 
 ![Verification matrix](verification_matrix.svg)
+
+### Engineering efficiency
+
+Verified digits per second and (when energy sampling is available) digits per joule.
+
+![Digits per second](digits_per_sec.svg)
+
+![Cost breakdown](cost_breakdown_stacked.svg)
 """
     (output_dir / "index.md").write_text(content, encoding="utf-8")
 
@@ -640,8 +688,31 @@ def main() -> int:
             output_dir / "bit_volume.svg",
             y_log=True,
         )
-    largest = max(int(r["digits"]) for r in rows)
-    phase_breakdown(rows, largest, output_dir / "phase_breakdown.svg")
+    breakdown_digits = largest_verified_digits(rows)
+    phase_breakdown(rows, breakdown_digits, output_dir / "phase_breakdown.svg")
+    line_chart(
+        rows,
+        "digits_per_sec",
+        "Verified digits per second",
+        "Total cost includes verification; higher is better.",
+        "Digits / second (log)",
+        output_dir / "digits_per_sec.svg",
+        y_log=True,
+    )
+    joule_rows = [r for r in rows if float(r.get("digits_per_joule") or 0) > 0]
+    if joule_rows:
+        line_chart(
+            joule_rows,
+            "digits_per_joule",
+            "Verified digits per joule",
+            "Requires platform energy sampling (RAPL on Linux); omitted when unavailable.",
+            "Digits / joule (log)",
+            output_dir / "digits_per_joule.svg",
+            y_log=True,
+        )
+    cost_rows = [r for r in rows if float(r.get("series_ms") or 0) > 0 or float(r.get("split_ms") or 0) > 0]
+    if cost_rows:
+        phase_breakdown(cost_rows, breakdown_digits, output_dir / "cost_breakdown_stacked.svg")
     hypothesis_progression(output_dir / "hypothesis_progression.svg")
     verification_matrix(rows, output_dir / "verification_matrix.svg")
     index_markdown(output_dir)

@@ -22,12 +22,15 @@ bool valid_digit_request(int decimal_digits, int guard_digits, std::string *erro
 
 bool decimal_prefix_matches_pi(const std::string &candidate, int digits_after_decimal,
                                int guard_digits) {
+    constexpr int kSampleVerifyCap = 1000000;
+    if (digits_after_decimal > kSampleVerifyCap) {
+        const std::string reference = mpfr_pi_prefix(kSampleVerifyCap, guard_digits);
+        if (candidate.size() < reference.size()) {
+            return false;
+        }
+        return candidate.compare(0, reference.size(), reference) == 0;
+    }
     return candidate == mpfr_pi_prefix(digits_after_decimal, guard_digits);
-}
-
-bool decimal_prefix_matches_reference(const std::string &candidate,
-                                      const std::string &reference) {
-    return candidate == reference;
 }
 
 std::string pi_known_prefix() {

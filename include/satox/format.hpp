@@ -9,6 +9,8 @@ namespace satox {
 
 int bits_for_decimal_digits(int decimal_digits, int guard_digits);
 std::string mpfr_to_decimal_prefix(mpfr_t value, int digits_after_decimal);
+// For very large prefixes, renders via a temp file to limit peak string churn.
+std::string mpfr_to_decimal_prefix_streaming(mpfr_t value, int digits_after_decimal);
 
 // Power-of-ten cache for fixed-point decimal rendering. Building it is pure
 // integer work that does not depend on the computed value, so callers can

@@ -22,9 +22,10 @@ over the last two decades (truncated binary splitting; tight per-node
 precision control), and contributed less-documented ones (root-Q elision
 with warm-started Newton correction; carry-checked spliced-prefix decimal
 rendering). We argue the contribution is methodological: the ledger,
-including its refuted entries and a machine-independent work metric that
-separates "less work" from "restructured work", is a template for auditable
-AI-driven performance engineering.
+including its refuted entries, a Cost(D) phase decomposition, energy- and
+I/O-aware efficiency metrics (digits/joule, digits/GB), and a four-layer
+baseline ladder with ablations, is a template for auditable systems-style
+performance engineering—not only raw digits/sec.
 
 ## 1. Introduction
 

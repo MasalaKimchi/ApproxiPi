@@ -15,26 +15,34 @@ endif
 
 SRC = \
 	src/agm.cpp \
+	src/bbp_algorithm.cpp \
 	src/binary_splitting.cpp \
 	src/bbp.cpp \
 	src/benchmark.cpp \
 	src/borwein.cpp \
 	src/borwein_cubic.cpp \
 	src/candidate.cpp \
+	src/checkpoint.cpp \
 	src/chudnovsky.cpp \
+	src/chudnovsky_baselines.cpp \
+	src/chudnovsky_common.cpp \
 	src/chudnovsky_crown.cpp \
 	src/crown.cpp \
 	src/external_baselines.cpp \
 	src/formula_spec.cpp \
 	src/format.cpp \
 	src/machin.cpp \
+	src/memory_estimate.cpp \
 	src/ramanujan.cpp \
+	src/residue_verify.cpp \
+	src/resource_monitor.cpp \
+	src/run_config.cpp \
 	src/tuner.cpp \
 	src/verification.cpp
 
 OBJ = $(SRC:src/%.cpp=build/%.o)
 
-.PHONY: all test smoke figures clean
+.PHONY: all test smoke smoke-engineering figures ablation clean
 
 all: bin/satox-bench bin/satox-tests
 
@@ -62,9 +70,22 @@ test: bin/satox-tests
 smoke: bin/satox-bench | results
 	./bin/satox-bench --digits 1000 --guard 25 --out results
 
+smoke-engineering: bin/satox-bench | results
+	./bin/satox-bench --digits 1000 --guard 25 --trials 1 --out results \
+		--algorithms chudnovsky_naive,chudnovsky_recurrence,chudnovsky_bs,bbp_hex_extract \
+		--ablation no_residues --skip-memory-guard
+
+ablation: bin/satox-bench | results
+	./bin/satox-bench --digits 100000 --guard 25 --trials 1 --out results --merge \
+		--algorithms chudnovsky_bs,chudnovsky_bs_crown --skip-memory-guard
+	./bin/satox-bench --digits 100000 --guard 25 --trials 1 --out results --merge \
+		--algorithms chudnovsky_bs --ablation no_gcd --skip-memory-guard
+	./bin/satox-bench --digits 100000 --guard 25 --trials 1 --out results --merge \
+		--algorithms chudnovsky_bs --ablation no_binary_split --skip-memory-guard
+
 figures: bin/satox-bench | results
-	./bin/satox-bench --digits 1000,10000,100000,1000000 --guard 25 --trials 3 --out results --candidates formulas/candidates.tsv --formula-dir candidates
 	python3 tools/make_figures.py --input results/benchmark.csv --output docs/figures
+	python3 tools/make_efficiency_table.py --input results/benchmark.csv --output results/efficiency.md
 
 clean:
 	rm -rf build bin

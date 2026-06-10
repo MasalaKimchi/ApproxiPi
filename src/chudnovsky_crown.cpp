@@ -1,7 +1,12 @@
 #include "satox/algorithm.hpp"
 
+#include "satox/chudnovsky_common.hpp"
 #include "satox/crown.hpp"
 #include "satox/format.hpp"
+#include "satox/limits.hpp"
+#include "satox/memory_estimate.hpp"
+#include "satox/residue_verify.hpp"
+#include "satox/run_config.hpp"
 #include "satox/timer.hpp"
 #include "satox/verification.hpp"
 
@@ -16,22 +21,8 @@
 namespace satox {
 namespace {
 
-constexpr double kChudnovskyDigitsPerTerm = 14.181647462725477;
-
 HypergeometricBsSpec chudnovsky_crown_spec() {
-    HypergeometricBsSpec spec;
-    spec.id = "chudnovsky_bs_crown";
-    spec.p_factors = {{6, -5}, {2, -1}, {6, -1}};
-    spec.q_factors = {{1, 0}, {1, 0}, {1, 0}};
-    spec.q_constant = 10939058860032000ul;
-    spec.linear_a = 545140134l;
-    spec.linear_b = 13591409l;
-    spec.alternating = true;
-    spec.unit_first_p = true;
-    spec.unit_first_q = true;
-    spec.leaf_t_uses_q = false;
-    spec.leaf_pq_cancellation = true;
-    return spec;
+    return make_chudnovsky_spec("chudnovsky_bs_crown", 8, true);
 }
 
 class ChudnovskyCrownAlgorithm final : public PiAlgorithm {
@@ -42,7 +33,7 @@ class ChudnovskyCrownAlgorithm final : public PiAlgorithm {
           tuning_path_(std::move(tuning_path)) {}
 
     AlgorithmMetadata metadata() const override {
-        return {name_, family_, 1, 1000000, true, false};
+        return {name_, family_, 1, kMaxBenchmarkDigits, true, false};
     }
 
     ComputeResult compute(int decimal_digits, int guard_digits) const override {
@@ -59,6 +50,9 @@ class ChudnovskyCrownAlgorithm final : public PiAlgorithm {
             result.error = "requested precision exceeds algorithm max_digits";
             return result;
         }
+        if (!memory_guard_allows(decimal_digits, result.metadata.name, &result.error)) {
+            return result;
+        }
 
         CrownTuning tuning;
         const bool tuned = !tuning_path_.empty();
@@ -69,7 +63,14 @@ class ChudnovskyCrownAlgorithm final : public PiAlgorithm {
         }
 
         result.supported = true;
-        const int effective_guard_digits = guard_digits + 128;
+        result.notes = global_run_config().ablation_tag;
+        int crown_guard_bonus = 128;
+        if (decimal_digits >= 100000000) {
+            crown_guard_bonus = 512;
+        } else if (decimal_digits >= 10000000) {
+            crown_guard_bonus = 256;
+        }
+        const int effective_guard_digits = guard_digits + crown_guard_bonus;
         const Timer timer;
         const unsigned long terms =
             static_cast<unsigned long>(std::ceil((decimal_digits + effective_guard_digits) /
@@ -338,10 +339,16 @@ class ChudnovskyCrownAlgorithm final : public PiAlgorithm {
         const Timer verify_timer;
         result.verified = decimal_prefix_matches_pi(result.decimal_prefix, decimal_digits,
                                                     effective_guard_digits);
-        result.verify_ms = verify_timer.wall_ms();
+        double residue_ms = 0.0;
+        if (result.verified) {
+            result.verified = verify_decimal_prefix_residues(result.decimal_prefix, decimal_digits,
+                                                               &residue_ms);
+        }
+        result.verify_ms = verify_timer.wall_ms() + residue_ms;
+        result.total_cost_ms = result.wall_ms + result.verify_ms;
         {
             std::ostringstream method;
-            method << "MPFR const_pi prefix (truncated crown; chunks "
+            method << "MPFR const_pi prefix + residues (truncated crown; chunks "
                    << std::fixed << std::setprecision(3) << crown_stats.chunk_ms
                    << "ms, merge " << crown_stats.merge_ms << "ms)";
             result.verification_method = method.str();

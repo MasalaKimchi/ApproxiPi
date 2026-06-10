@@ -14,6 +14,9 @@ namespace {
 void test_known_prefixes() {
     auto algorithms = satox::make_default_algorithms();
     for (const auto &algorithm : algorithms) {
+        if (algorithm->metadata().verification_only) {
+            continue;
+        }
         for (int digits : {50, 100, 1000}) {
             const satox::ComputeResult result = algorithm->compute(digits, 25);
             assert(result.supported);
@@ -98,10 +101,36 @@ void test_formula_specs() {
     assert(report.find("R-396") != std::string::npos);
 }
 
+void test_naive_matches_bs() {
+    auto naive = satox::make_chudnovsky_naive_algorithm();
+    auto bs = satox::make_chudnovsky_algorithm();
+    const satox::ComputeResult naive_result = naive->compute(100, 25);
+    const satox::ComputeResult bs_result = bs->compute(100, 25);
+    assert(naive_result.verified);
+    assert(bs_result.verified);
+    assert(naive_result.decimal_prefix == bs_result.decimal_prefix);
+}
+
+void test_bbp_algorithm() {
+    auto bbp = satox::make_bbp_hex_extract_algorithm();
+    const satox::ComputeResult result = bbp->compute(1000, 25);
+    assert(result.supported);
+    assert(result.verified);
+    assert(result.metadata.verification_only);
+}
+
+void test_csv_schema_extended() {
+    assert(satox::csv_header().find("digits_per_joule") != std::string::npos);
+    assert(satox::csv_header().find("peak_rss_bytes") != std::string::npos);
+}
+
 } // namespace
 
 int main() {
     test_known_prefixes();
+    test_naive_matches_bs();
+    test_bbp_algorithm();
+    test_csv_schema_extended();
     test_invalid_inputs();
     test_bbp_spots();
     test_candidate_metadata();

@@ -32,10 +32,12 @@ std::vector<std::string> parse_names(const std::string &text) {
 
 void usage(const char *program) {
     std::cerr << "Usage: " << program
-              << " [--digits 1000,10000,100000,1000000] [--guard 25]"
-                 " [--trials 3] [--warmups 0] [--out results]"
+              << " [--digits 100000,1000000,10000000,100000000] [--guard 25]"
+                 " [--trials 3] [--warmups 0] [--timeout-sec 0] [--out results]"
                  " [--candidates formulas/candidates.tsv] [--formula-dir candidates]"
-                 " [--algorithms name1,name2]\n"
+                 " [--algorithms name1,name2] [--ablation name]"
+                 " [--electricity-usd-per-kwh 0.12] [--instance-usd-per-hour 0]"
+                 " [--no-energy] [--skip-memory-guard] [--merge]\n"
               << "       " << program
               << " --tune [--digits 1000000] [--guard 25] [--trials 3] [--passes 2]"
                  " [--out results]\n";
@@ -62,6 +64,8 @@ int main(int argc, char **argv) {
             options.trials = std::stoi(argv[++i]);
         } else if (arg == "--warmups" && i + 1 < argc) {
             options.warmups = std::stoi(argv[++i]);
+        } else if (arg == "--timeout-sec" && i + 1 < argc) {
+            options.timeout_sec = std::stoi(argv[++i]);
         } else if (arg == "--out" && i + 1 < argc) {
             options.output_dir = argv[++i];
         } else if (arg == "--candidates" && i + 1 < argc) {
@@ -70,6 +74,18 @@ int main(int argc, char **argv) {
             options.formula_dir = argv[++i];
         } else if (arg == "--algorithms" && i + 1 < argc) {
             options.algorithms = parse_names(argv[++i]);
+        } else if (arg == "--ablation" && i + 1 < argc) {
+            options.ablation = argv[++i];
+        } else if (arg == "--electricity-usd-per-kwh" && i + 1 < argc) {
+            options.electricity_usd_per_kwh = std::stod(argv[++i]);
+        } else if (arg == "--instance-usd-per-hour" && i + 1 < argc) {
+            options.instance_usd_per_hour = std::stod(argv[++i]);
+        } else if (arg == "--no-energy") {
+            options.measure_energy = false;
+        } else if (arg == "--skip-memory-guard") {
+            options.skip_memory_guard = true;
+        } else if (arg == "--merge") {
+            options.merge = true;
         } else if (arg == "--help") {
             usage(argv[0]);
             return 0;

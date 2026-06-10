@@ -53,3 +53,11 @@ Wall-time improvements from the optimization hypothesis sequence. Numbered stage
 Green cells passed full-prefix verification; gray cells exceed the algorithm's precision cap.
 
 ![Verification matrix](verification_matrix.svg)
+
+### Engineering efficiency
+
+Verified digits per second and (when energy sampling is available) digits per joule.
+
+![Digits per second](digits_per_sec.svg)
+
+![Cost breakdown](cost_breakdown_stacked.svg)
