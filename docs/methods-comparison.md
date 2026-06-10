@@ -352,7 +352,7 @@ The crown variant demonstrates that for Chudnovsky-class series, the dominant wi
 ## Reproducibility
 
 ```bash
-make                    # build bin/satox-bench, bin/satox-tests
+make                    # build bin/satox-bench, bin/satox-tests (not vendored in git)
 bin/satox-bench         # regenerate results/benchmark.csv, summary.md
 bin/satox-bench --tune  # optional crown autotuning → results/tuning.json
 make figures            # docs/figures/*.svg from benchmark data

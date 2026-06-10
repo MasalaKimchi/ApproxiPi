@@ -19,13 +19,23 @@ baseline). SATO-X crown variants sit on top with ablation support. Protocol:
 
 ## Build
 
+**Binaries are not checked in.** Every clone must compile from source so results
+are reproducible on your machine and library versions:
+
 ```sh
-make
+make    # -> bin/satox-bench, bin/satox-tests
 ```
+
+Dependencies: C++17 compiler (`clang++` or `g++`), GMP, MPFR (`pkg-config`).
+On macOS: `brew install gmp mpfr`; on Debian/Ubuntu:
+`apt install build-essential pkg-config libgmp-dev libmpfr-dev`.
 
 FLINT is optional: when `pkg-config --exists flint` succeeds (e.g.
 `brew install flint`), the `arb_const_pi` external baseline is compiled in;
 otherwise it reports itself as unavailable and everything else still builds.
+
+CI (`.github/workflows/ci.yml`) runs `make`, `make test`, and `make smoke` on
+every push to `main`.
 
 ## Test
 
@@ -34,6 +44,8 @@ make test
 ```
 
 ## Smoke Benchmark
+
+Quick sanity check (writes to `/tmp/satox-smoke`, not `results/`):
 
 ```sh
 make smoke

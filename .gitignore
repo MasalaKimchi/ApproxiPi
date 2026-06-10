@@ -1,0 +1,10 @@
+# Compiler outputs — always rebuild with `make` (see README).
+/bin/
+/build/
+
+# macOS
+.DS_Store
+
+# Editor backups
+*~
+*.swp

@@ -96,6 +96,8 @@ make ablation
 
 ## Reproduce
 
+Build artifacts (`bin/`, `build/`) are gitignored; always compile before running.
+
 ```bash
 make
 make test

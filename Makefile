@@ -42,6 +42,8 @@ SRC = \
 
 OBJ = $(SRC:src/%.cpp=build/%.o)
 
+SMOKE_OUT ?= /tmp/satox-smoke
+
 .PHONY: all test smoke smoke-engineering figures ablation clean
 
 all: bin/satox-bench bin/satox-tests
@@ -67,8 +69,9 @@ build bin results:
 test: bin/satox-tests
 	./bin/satox-tests
 
-smoke: bin/satox-bench | results
-	./bin/satox-bench --digits 1000 --guard 25 --out results
+smoke: bin/satox-bench
+	mkdir -p $(SMOKE_OUT)
+	./bin/satox-bench --digits 1000 --guard 25 --out $(SMOKE_OUT)
 
 smoke-engineering: bin/satox-bench | results
 	./bin/satox-bench --digits 1000 --guard 25 --trials 1 --out results \
