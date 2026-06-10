@@ -286,7 +286,7 @@ $$\pi \approx \frac{1}{a_n}$$
 
 ## External baselines
 
-These are not SATO-X algorithms; they invoke library routines for $\pi$ and pass the result through the **same** format and verify pipeline, enabling apples-to-apples wall-time comparison.
+These are not SATO-X algorithms; they invoke library routines for $\pi$ and pass the result through the same format and verify **correctness** gate (prefix hash). **Timer boundaries are not yet apples-to-apples** — see the open issue in [`benchmark-timing-fairness.md`](benchmark-timing-fairness.md) before trusting cross-family `wall_ms` rankings.
 
 ### MPFR `const_pi` — `mpfr_const_pi`
 

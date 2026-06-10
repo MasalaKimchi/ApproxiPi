@@ -16,6 +16,12 @@ efficiency = (seconds × watts × bytes moved) / verified digits
 
 Also publish: digits/sec, digits/joule, digits/GB moved, verified digits/$.
 
+> **Open issue:** `wall_ms` and `total_cost_ms` use inconsistent timer boundaries
+> across algorithms (SATO-X includes verify in `wall_ms`; external baselines do not;
+> `total_cost_ms` double-counts verify for SATO-X). Do not publish cross-family
+> wall-time rankings until this is fixed. See
+> [`docs/benchmark-timing-fairness.md`](benchmark-timing-fairness.md).
+
 ## Digit ladder
 
 Publishable runs use `10^5, 10^6, 10^7, 10^8` decimal digits. Smoke tests may use `10^3` or `10^4`.

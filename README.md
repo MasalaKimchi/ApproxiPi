@@ -17,7 +17,8 @@ the benchmark summary for independent verification but are not timed against ful
 prefix algorithms. Protocol:
 [`docs/benchmark-protocol.md`](docs/benchmark-protocol.md). Methods:
 [`docs/methods-comparison.md`](docs/methods-comparison.md). Paper:
-[`docs/PAPER.md`](docs/PAPER.md).
+[`docs/PAPER.md`](docs/PAPER.md). **Open:** benchmark timer-boundary fairness
+([`docs/benchmark-timing-fairness.md`](docs/benchmark-timing-fairness.md)).
 
 ## Build
 
