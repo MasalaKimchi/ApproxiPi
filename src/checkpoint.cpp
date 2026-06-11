@@ -12,7 +12,7 @@ namespace satox {
 namespace {
 
 std::string checkpoint_dir(const std::string &run_id) {
-    return "results/checkpoints/" + run_id;
+    return global_run_config().scratch_dir + "/checkpoints/" + run_id;
 }
 
 } // namespace

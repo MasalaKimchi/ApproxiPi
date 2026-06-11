@@ -1,12 +1,14 @@
 #include "satox/format.hpp"
 
 #include "satox/resource_monitor.hpp"
+#include "satox/run_config.hpp"
 
 #include <gmp.h>
 
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <filesystem>
 #include <fstream>
 #include <future>
 #include <sstream>
@@ -197,7 +199,8 @@ std::string mpfr_to_decimal_prefix_streaming(mpfr_t value, int digits_after_deci
         return mpfr_to_decimal_prefix(value, digits_after_decimal);
     }
 
-    const std::string path = "results/tmp_pi_prefix.txt";
+    std::filesystem::create_directories(global_run_config().scratch_dir);
+    const std::string path = global_run_config().scratch_dir + "/tmp_pi_prefix.txt";
     std::ofstream out(path, std::ios::binary);
     if (!out) {
         return mpfr_to_decimal_prefix(value, digits_after_decimal);

@@ -23,6 +23,7 @@ struct RunConfig {
     double instance_usd_per_hour = 0.0;
     bool measure_energy = true;
     bool skip_memory_guard = false;
+    std::string scratch_dir = "/tmp/satox";
 };
 
 RunConfig &global_run_config();

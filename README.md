@@ -132,8 +132,8 @@ and recurrence degree. Symbolic targets such as `CM-HX` can be represented with
 non-numeric discriminants like `-d`, but they remain metadata-only until a proof
 certificate and benchmark kernel exist.
 
-Formula specs live in `candidates/*.formula`. They are key-value files that can
-describe a linear-factor hypergeometric binary-splitting candidate:
+Formula specs live in `formulas/specs/*.formula`. They are key-value files that
+can describe a linear-factor hypergeometric binary-splitting candidate:
 
 ```text
 id=C-163
@@ -150,7 +150,11 @@ gcd_cancellation=no
 ```
 
 Running the benchmark writes `results/satox-score.md`, a ranked pre-benchmark
-score report for all formula specs in the candidate directory.
+score report for all formula specs in the formula spec directory.
+
+Large transient formatter and checkpoint files are written under `/tmp/satox`.
+Use `make clean-tmp` to remove scratch data, or `make distclean` to remove both
+build products and scratch data.
 
 ## Figures
 

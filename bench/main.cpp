@@ -34,7 +34,7 @@ void usage(const char *program) {
     std::cerr << "Usage: " << program
               << " [--digits 100000,1000000,10000000,100000000] [--guard 25]"
                  " [--trials 3] [--warmups 0] [--timeout-sec 0] [--out results]"
-                 " [--candidates formulas/candidates.tsv] [--formula-dir candidates]"
+                 " [--candidates formulas/candidates.tsv] [--formula-dir formulas/specs]"
                  " [--algorithms name1,name2] [--ablation name]"
                  " [--electricity-usd-per-kwh 0.12] [--instance-usd-per-hour 0]"
                  " [--no-energy] [--skip-memory-guard] [--merge]\n"

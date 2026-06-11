@@ -16,7 +16,7 @@ struct BenchmarkOptions {
     int timeout_sec = 0;
     std::string output_dir = "results";
     std::string candidate_file;
-    std::string formula_dir = "candidates";
+    std::string formula_dir = "formulas/specs";
     std::vector<std::string> algorithms;
     std::string ablation;
     double electricity_usd_per_kwh = 0.12;

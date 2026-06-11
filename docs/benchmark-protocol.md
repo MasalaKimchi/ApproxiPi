@@ -54,6 +54,9 @@ relative wall time.
 - `results/summary.md` — human table
 - `results/efficiency.md` — publishable efficiency table (`make figures`)
 
+Large transient formatter and checkpoint files are scratch data and default to
+`/tmp/satox`; remove them with `make clean-tmp`.
+
 Incremental runs (e.g. scale-out to 10^7/10^8 or ablations) use `--merge` to fold
 new rows into the existing `benchmark.csv` instead of writing separate subfolders:
 

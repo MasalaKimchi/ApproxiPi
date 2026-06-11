@@ -45,7 +45,7 @@ OBJ = $(SRC:src/%.cpp=build/%.o)
 
 SMOKE_OUT ?= /tmp/satox-smoke
 
-.PHONY: all test smoke smoke-engineering figures ablation clean
+.PHONY: all test smoke smoke-engineering figures ablation clean clean-tmp distclean
 
 all: bin/satox-bench bin/satox-tests
 
@@ -93,5 +93,10 @@ figures: bin/satox-bench | results
 
 clean:
 	rm -rf build bin
+
+clean-tmp:
+	rm -rf /tmp/satox results/tmp_pi_prefix.txt results/checkpoints
+
+distclean: clean clean-tmp
 
 -include $(OBJ:.o=.d) build/bench_main.d build/test_main.d

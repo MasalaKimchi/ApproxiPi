@@ -105,7 +105,8 @@ void test_generic_binary_splitting() {
 }
 
 void test_formula_specs() {
-    const std::vector<satox::FormulaSpec> formulas = satox::load_formula_specs("candidates");
+    const std::vector<satox::FormulaSpec> formulas =
+        satox::load_formula_specs("formulas/specs");
     assert(formulas.size() >= 2);
     const std::string report = satox::formula_score_report(formulas, 1000);
     assert(report.find("C-163") != std::string::npos);
