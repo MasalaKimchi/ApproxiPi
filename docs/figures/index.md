@@ -42,7 +42,7 @@ Series methods report term counts; AGM reports iterations.
 
 ### Hypothesis ledger at 1M digits
 
-Compute wall (split + finalize + format; verify excluded) at 1M digits. H0–H12 from the research-log development ledger; H13–H15 remeasured on the current harness (dashed line marks the regime change). H13 optimizes verification only; H14 routes by scale; H15 adds merge-adaptive crown depth.
+Compute wall (split + finalize + format; verify excluded) at 1M digits. H0–H12 from the research-log development ledger; H13+ is remeasured or refreshed on the current harness (dashed line marks the regime change). H20 gives Arb the same scaled-verify/parallel-format pipeline; H22 retunes hybrid routing to use Arb from 10^6 digits.
 
 ![Hypothesis progression](hypothesis_progression.svg)
 

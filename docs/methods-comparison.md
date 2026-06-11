@@ -10,21 +10,22 @@ Each timing cell is **`wall_ms` / `total_cost_ms`** (milliseconds). **`wall_ms`*
 
 | Algorithm key | Category | Convergence | Max digits | 10k (wall/total) | 100k (wall/total) | 1M (wall/total) | 10M (wall/total) | 100M (wall/total) | vs `chudnovsky_bs` @1M |
 |---|---|---:|---:|---:|---:|---:|---:|---:|---:|
-| `chudnovsky_bs` | Series / BS | 14.18 digits/term | 100,000,000 | 1.51 / 3.18 | 50.9 / 36.8 | 531.5 / 320.9 | 5746 / 5751 | 94023 / 93100 | 1.00× |
-| `chudnovsky_bs_valuation` | Series / BS | 14.18 digits/term | 100,000,000 | 1.48 / 2.75 | 35.7 / 36.3 | 315.7 / 318.6 | 5584 / 5522 | 92600 / 93040 | 0.99× |
-| `chudnovsky_bs_crown` | Series / TCBS | 14.18 digits/term | 100,000,000 | 0.70 / 1.37 | 7.23 / 8.00 | 83.0 / 89.2 | 1731 / 1610 | 27872 / 28239 | **0.28×** |
-| `chudnovsky_bs_crown_tuned` | Series / TCBS | 14.18 digits/term | 1,000,000 | — | — | — | — | — | — |
-| `ramanujan_classic_bs` | Series / BS | 7.98 digits/term | 10,000,000 | 1.16 / 2.43 | 19.2 / 19.7 | 232.9 / 240.3 | 4356 / 4400 | 39261 / —† | 0.75× |
+| `chudnovsky_bs` | Series / BS | 14.18 digits/term | 100,000,000 | 1.37 / 1.40 | 33.5 / 34.4 | 324 / 341 | 5477 / 5547 | 94023 / 94603 | 1.00× |
+| `chudnovsky_bs_valuation` | Series / BS | 14.18 digits/term | 100,000,000 | 1.47 / 1.51 | 32.2 / 33.1 | 785 / 1267 | 5464 / 5533 | 92870 / 93454 | 3.71× |
+| `chudnovsky_bs_crown` | Series / TCBS | 14.18 digits/term | 100,000,000 | 1.02 / 1.05 | 6.65 / 7.56 | 103 / 121 | 1669 / 1744 | 29574 / 30701 | **0.36×** |
+| `chudnovsky_bs_crown_tuned` | Series / TCBS | 14.18 digits/term | 100,000,000 | 1.16 / 1.19 | 6.74 / 7.64 | 86.4 / 103.6 | 1268 / 1338 | 23696 / 24311 | **0.30×** |
+| `ramanujan_classic_bs` | Series / BS | 7.98 digits/term | 10,000,000 | 1.14 / 1.17 | 18.1 / 19.0 | 233 / 241 | 4886 / 5423 | — | 0.71× |
 | `machin_arctan` | Series / arctan | ~1.4 digits/term | 100,000 | — | — | — | — | — | — |
 | `gauss_legendre_agm` | Iterative / AGM | ~2× digits/iter | 100,000 | — | — | — | — | — | — |
 | `borwein_cubic` | Iterative / Borwein | ~3× digits/iter | 1,000,000 | — | — | — | — | — | — |
 | `borwein_quartic` | Iterative / Borwein | ~4× digits/iter | 1,000,000 | — | — | — | — | — | — |
-| `mpfr_const_pi` | External / MPFR | library-internal | 100,000,000 | 0.75 / 0.84 | 27.1 / 28.3 | 480.8 / 501.7 | 8997 / 8976 | 142610 / 141006 | 1.56× |
-| `arb_const_pi` | External / FLINT | library-internal | 100,000,000 | 1.39 / 1.69 | 10.5 / 35.0 | 104.2 / 562.8 | 1472 / 1911 | 21332 / 21589 | 1.75× |
+| `mpfr_const_pi` | External / MPFR | library-internal | 100,000,000 | 0.85 / 0.88 | 25.7 / 26.6 | 444 / 461 | 8314 / 8383 | 133903 / 134484 | 1.35× |
+| `arb_const_pi` | External / FLINT | library-internal | 100,000,000 | 0.89 / 0.92 | 7.56 / 8.47 | 80.3 / 98.8 | 912 / 982 | 12888 / 13940 | **0.29×** |
+| `chudnovsky_hybrid` | Router | scale-aware | 100,000,000 | 0.92 / 0.95 | 6.61 / 7.51 | 78.5 / 95.8 | 968 / 1039 | 12508 / 13086 | **0.28×** |
 
-**Reading the table:** Lower **total** time is better for end-to-end comparisons; **wall** isolates compute. The crown variant dominates at ≥10⁴ digits on total cost; FLINT/Arb (`arb_const_pi`) can win below ~10⁴ on wall time but verify dominates Arb totals at 10⁶. Rows marked — were not in the current `benchmark.csv` sweep (Machin, AGM, Borwein, crown_tuned). †Ramanujan @10⁸ failed verification in the latest sweep (total omitted).
+**Reading the table:** Lower **total** time is better for end-to-end comparisons; **wall** isolates compute. After H20/H21, FLINT/Arb (`arb_const_pi`) uses the same scaled-integer verification and parallel decimal rendering as the crown path, so the hybrid router now uses crown below 10⁶ digits and Arb at 10⁶+. Rows marked — are unsupported at that scale. Ramanujan is capped at 10⁷ after 10⁸ failed even with guard 1000.
 
-**Timing notes (H13):** Before H13, verification used post-format MPFR prefix checks (expensive at 10⁶+ digits). H13 compares scaled integers in MPFR *before* decimal rendering (`V = min(D, 10⁶)`), collapsing verify from hundreds of ms to single-digit ms for SATO-X series paths. That shifts the meaningful headline metric from wall-only to **total_cost_ms**; older prose that cited wall-only crown @1M ≈ 59 ms predates both the 2-trial re-benchmark and H13. Crown @1M is now **83.0 ms wall / 89.2 ms total** vs **531.5 / 320.9** for baseline Chudnovsky BS.
+**Timing notes (H13/H20/H21/H23):** Before H13, verification used post-format MPFR prefix checks (expensive at 10⁶+ digits). H13 compares scaled integers in MPFR *before* decimal rendering (`V = min(D, 10⁶)`). H20 applies that same path and the parallel decimal renderer to MPFR/Arb baselines; H21 caches the reference scaled integer per precision. H23 normalized merged `total_cost_ms = wall_ms + verify_ms + io_ms`. Crown @1M is now **102.5 ms wall / 121.4 ms total**, while the refreshed hybrid is **78.5 / 95.8**.
 
 ---
 
@@ -322,19 +323,18 @@ These are not SATO-X algorithms; they invoke library routines for $\pi$ and pass
 
 **Convergence:** N/A — one library call.
 
-**Implementation:** `flint_set_num_threads(hardware_concurrency())`, `flint_cleanup()` for cold cache; Arb result converted to MPFR for formatting. Requires `SATOX_HAVE_FLINT` at build time.
+**Implementation:** `flint_set_num_threads(hardware_concurrency())`, `flint_cleanup()` for cold cache; Arb result converted to MPFR, scaled once by `10^D`, verified with the shared H13 scaled-integer reference cache, and formatted with the parallel decimal renderer. Requires `SATOX_HAVE_FLINT` at build time.
 
 **Strengths:**
-- **Fastest below ~10⁴ digits** (0.009 ms @1k — 5× faster than crown)
-- Strong at 10⁵ (8.81 ms vs crown 4.17 ms is closer; crown wins)
+- Fast from 10⁶ upward after H20/H21 (80 ms wall @1M; 912 ms @10M)
+- Strong at 10⁵, though crown/hybrid still wins total cost there
 - Rigorous interval arithmetic in Arb itself
 
 **Weaknesses:**
-- Verify phase dominates at 10⁶ (462 ms verify vs 49 ms finalize — MPFR prefix check on a million-digit string)
-- Verify dominates at 10⁶: 498.6 ms verify vs 52.4 ms finalize (562.8 ms total vs crown 89.2 ms)
+- Decimal rendering is still heavier than crown at large sizes
 - Not built if FLINT is absent
 
-**Benchmark highlights:** 1.69 ms total @10k · 35.0 ms total @100k · **562.8 ms total @1M** (104.2 ms wall)
+**Benchmark highlights:** 1.44 ms total @10k · 9.59 ms total @100k · **98.0 ms total @1M** (80.3 ms wall)
 
 ---
 
@@ -342,7 +342,8 @@ These are not SATO-X algorithms; they invoke library routines for $\pi$ and pass
 
 | Goal | Recommendation |
 |---|---|
-| Maximum speed at ≥10⁴ verified digits | `chudnovsky_bs_crown` or `chudnovsky_bs_crown_tuned` |
+| Maximum speed at ≥10⁶ verified digits | `chudnovsky_hybrid` when FLINT is built |
+| Maximum speed at 10⁴-10⁵ verified digits | `chudnovsky_bs_crown` |
 | Simplicity / reference baseline | `chudnovsky_bs` |
 | Small precision (≤10³ digits) on this host | `arb_const_pi` (if FLINT built) |
 | Cross-implementation verification | Run several families; all share prefix hash + BBP spots |

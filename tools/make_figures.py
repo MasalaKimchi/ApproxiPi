@@ -34,6 +34,73 @@ PALETTE = {
     "chudnovsky_hybrid": "#be123c",
 }
 
+ALGORITHM_GROUPS = {
+    "SATO-X Chudnovsky": [
+        "chudnovsky_hybrid",
+        "chudnovsky_bs_crown_tuned",
+        "chudnovsky_bs_crown_h15",
+        "chudnovsky_bs_crown",
+        "chudnovsky_bs_valuation",
+        "chudnovsky_bs",
+        "chudnovsky_naive",
+        "chudnovsky_recurrence",
+    ],
+    "Other Series": [
+        "ramanujan_classic_bs",
+        "machin_arctan",
+    ],
+    "Iterative": [
+        "gauss_legendre_agm",
+        "borwein_cubic",
+        "borwein_quartic",
+    ],
+    "External References": [
+        "arb_const_pi",
+        "mpfr_const_pi",
+    ],
+}
+
+GROUP_LABELS = {algorithm: group for group, algorithms in ALGORITHM_GROUPS.items() for algorithm in algorithms}
+ALGORITHM_ORDER = {
+    algorithm: index
+    for index, algorithm in enumerate(
+        algorithm for algorithms in ALGORITHM_GROUPS.values() for algorithm in algorithms
+    )
+}
+
+MARKERS = {
+    "chudnovsky_hybrid": "star",
+    "chudnovsky_bs_crown_tuned": "diamond",
+    "chudnovsky_bs_crown_h15": "triangle-up",
+    "chudnovsky_bs_crown": "circle",
+    "chudnovsky_bs_valuation": "square",
+    "chudnovsky_bs": "circle-open",
+    "chudnovsky_naive": "x",
+    "chudnovsky_recurrence": "plus",
+    "ramanujan_classic_bs": "triangle-down",
+    "ramanujan_classic": "triangle-down",
+    "machin_arctan": "square-open",
+    "gauss_legendre_agm": "diamond-open",
+    "borwein_cubic": "hex",
+    "borwein_quartic": "pentagon",
+    "arb_const_pi": "star-open",
+    "mpfr_const_pi": "cross",
+}
+
+LINE_STYLES = {
+    "chudnovsky_bs_crown_tuned": "7 4",
+    "chudnovsky_bs_crown_h15": "3 4",
+    "chudnovsky_bs_valuation": "8 3 2 3",
+    "chudnovsky_naive": "2 5",
+    "chudnovsky_recurrence": "2 5",
+    "machin_arctan": "5 4",
+    "gauss_legendre_agm": "6 3",
+    "borwein_cubic": "4 3",
+    "borwein_quartic": "8 3",
+    "mpfr_const_pi": "3 3",
+    "arb_const_pi": "10 3",
+}
+
 LABELS = {
     "chudnovsky_naive": "Chudnovsky naive",
     "chudnovsky_recurrence": "Chudnovsky recurrence",
@@ -49,7 +116,7 @@ LABELS = {
     "borwein_quartic": "Borwein quartic",
     "mpfr_const_pi": "MPFR const_pi",
     "arb_const_pi": "FLINT/Arb const_pi",
-    "chudnovsky_hybrid": "Hybrid router (H14)",
+    "chudnovsky_hybrid": "Hybrid router (H22)",
 }
 
 GRID = "#d7dde8"
@@ -59,6 +126,7 @@ MUTED = "#64748b"
 OK = "#15803d"
 SKIP = "#94a3b8"
 FAIL = "#b91c1c"
+NOT_RUN = "#cbd5e1"
 
 
 def safe_float(value: object, default: float = 0.0) -> float:
@@ -120,6 +188,99 @@ def format_digit_label(digits: int) -> str:
     return f"{digits:,}"
 
 
+def algorithm_sort_key(algorithm: str) -> tuple[int, str]:
+    return (ALGORITHM_ORDER.get(algorithm, 10_000), LABELS.get(algorithm, algorithm))
+
+
+def ordered_algorithms(algorithms: Iterable[str]) -> list[str]:
+    return sorted(algorithms, key=algorithm_sort_key)
+
+
+def marker_svg(
+    shape: str,
+    x: float,
+    y: float,
+    color: str,
+    size: float = 6.0,
+    stroke_width: float = 1.8,
+) -> str:
+    x_s, y_s = fmt(x), fmt(y)
+    fill = color
+    stroke = "#fff"
+    sw = stroke_width
+    if shape.endswith("-open"):
+        fill = "#fff"
+        stroke = color
+        sw = 2.2
+        shape = shape[:-5]
+    if shape == "circle":
+        return (
+            f'<circle cx="{x_s}" cy="{y_s}" r="{fmt(size)}" fill="{fill}" '
+            f'stroke="{stroke}" stroke-width="{fmt(sw)}"/>'
+        )
+    if shape == "square":
+        s = size * 1.45
+        return (
+            f'<rect x="{fmt(x - s / 2)}" y="{fmt(y - s / 2)}" width="{fmt(s)}" height="{fmt(s)}" '
+            f'rx="1.5" fill="{fill}" stroke="{stroke}" stroke-width="{fmt(sw)}"/>'
+        )
+    if shape == "diamond":
+        s = size * 1.45
+        points = [(x, y - s / 2), (x + s / 2, y), (x, y + s / 2), (x - s / 2, y)]
+    elif shape == "triangle-up":
+        s = size * 1.8
+        points = [(x, y - s / 2), (x + s / 2, y + s / 2), (x - s / 2, y + s / 2)]
+    elif shape == "triangle-down":
+        s = size * 1.8
+        points = [(x - s / 2, y - s / 2), (x + s / 2, y - s / 2), (x, y + s / 2)]
+    elif shape == "pentagon":
+        points = [
+            (x + math.cos(-math.pi / 2 + i * 2 * math.pi / 5) * size,
+             y + math.sin(-math.pi / 2 + i * 2 * math.pi / 5) * size)
+            for i in range(5)
+        ]
+    elif shape == "hex":
+        points = [
+            (x + math.cos(math.pi / 6 + i * math.pi / 3) * size,
+             y + math.sin(math.pi / 6 + i * math.pi / 3) * size)
+            for i in range(6)
+        ]
+    elif shape in {"star", "star-open"}:
+        points = [
+            (
+                x + math.cos(-math.pi / 2 + i * math.pi / 5) * (size if i % 2 == 0 else size * 0.45),
+                y + math.sin(-math.pi / 2 + i * math.pi / 5) * (size if i % 2 == 0 else size * 0.45),
+            )
+            for i in range(10)
+        ]
+    elif shape == "x":
+        s = size
+        return (
+            f'<path d="M{fmt(x - s)} {fmt(y - s)} L{fmt(x + s)} {fmt(y + s)} '
+            f'M{fmt(x + s)} {fmt(y - s)} L{fmt(x - s)} {fmt(y + s)}" '
+            f'stroke="{color}" stroke-width="{fmt(sw + 0.4)}" stroke-linecap="round"/>'
+        )
+    elif shape in {"plus", "cross"}:
+        s = size
+        rotate = f' transform="rotate(45 {x_s} {y_s})"' if shape == "cross" else ""
+        return (
+            f'<path d="M{fmt(x - s)} {y_s} L{fmt(x + s)} {y_s} M{x_s} {fmt(y - s)} L{x_s} {fmt(y + s)}"'
+            f'{rotate} stroke="{color}" stroke-width="{fmt(sw + 0.4)}" stroke-linecap="round"/>'
+        )
+    else:
+        return marker_svg("circle", x, y, color, size, stroke_width)
+    point_text = " ".join(f"{fmt(px)},{fmt(py)}" for px, py in points)
+    return (
+        f'<polygon points="{point_text}" fill="{fill}" stroke="{stroke}" '
+        f'stroke-width="{fmt(sw)}" stroke-linejoin="round"/>'
+    )
+
+
+def line_dash_attribute(algorithm: str) -> str:
+    dash = LINE_STYLES.get(algorithm)
+    return f' stroke-dasharray="{dash}"' if dash else ""
+
+
 def largest_verified_digits(rows: list[dict[str, object]]) -> int:
     verified = [
         int(r["digits"])
@@ -173,28 +334,52 @@ def render_legend(
     width: float,
     cols: int = LEGEND_COLS,
 ) -> list[str]:
-    """Multi-column legend below the plot area."""
+    """Grouped multi-column legend below the plot area."""
     if not algorithms:
         return []
-    rows = math.ceil(len(algorithms) / cols)
+    grouped: list[tuple[str, list[str]]] = []
+    seen = set(algorithms)
+    for group, group_algorithms in ALGORITHM_GROUPS.items():
+        present = [algorithm for algorithm in group_algorithms if algorithm in seen]
+        if present:
+            grouped.append((group, present))
+    leftovers = [algorithm for algorithm in algorithms if algorithm not in GROUP_LABELS]
+    if leftovers:
+        grouped.append(("Other", leftovers))
+
+    entries: list[tuple[str, str]] = []
+    for group, group_algorithms in grouped:
+        entries.append(("__group__", group))
+        entries.extend(("algorithm", algorithm) for algorithm in group_algorithms)
+
+    rows = math.ceil(len(entries) / cols)
     box_h = LEGEND_PAD * 2 + rows * LEGEND_ROW_HEIGHT
     col_w = width / cols
     parts = [
         f'<rect class="legend-box" x="{fmt(x0)}" y="{fmt(y0)}" '
         f'width="{fmt(width)}" height="{fmt(box_h)}" rx="8"/>',
     ]
-    for index, algorithm in enumerate(algorithms):
+    for index, (entry_type, value) in enumerate(entries):
         col = index % cols
         row = index // cols
         x = x0 + 16 + col * col_w
         y = y0 + LEGEND_PAD + row * LEGEND_ROW_HEIGHT + 4
+        if entry_type == "__group__":
+            parts.append(
+                f'<text class="legend" x="{fmt(x)}" y="{fmt(y + 4)}" '
+                f'font-weight="700" fill="{MUTED}">{html.escape(value)}</text>'
+            )
+            continue
+        algorithm = value
         color = PALETTE.get(algorithm, "#6d28d9")
-        parts.append(f'<line x1="{fmt(x)}" y1="{fmt(y - 1)}" x2="{fmt(x + 22)}" y2="{fmt(y - 1)}" '
-                     f'stroke="{color}" stroke-width="3" stroke-linecap="round"/>')
-        parts.append(f'<circle cx="{fmt(x + 11)}" cy="{fmt(y - 1)}" r="4.5" fill="{color}" '
-                     f'stroke="#fff" stroke-width="1.5"/>')
+        dash = line_dash_attribute(algorithm)
         parts.append(
-            f'<text class="legend" x="{fmt(x + 30)}" y="{fmt(y + 4)}">'
+            f'<line x1="{fmt(x)}" y1="{fmt(y - 1)}" x2="{fmt(x + 24)}" y2="{fmt(y - 1)}" '
+            f'stroke="{color}" stroke-width="3" stroke-linecap="round"{dash}/>'
+        )
+        parts.append(marker_svg(MARKERS.get(algorithm, "circle"), x + 12, y - 1, color, 5.2))
+        parts.append(
+            f'<text class="legend" x="{fmt(x + 32)}" y="{fmt(y + 4)}">'
             f"{html.escape(LABELS.get(algorithm, algorithm))}</text>"
         )
     return parts
@@ -253,7 +438,7 @@ def line_chart(
         for r in rows
         if r["supported"] and r["verified"] and float(r[metric]) > 0 and int(r["digits"]) > 0
     ]
-    algorithms = sorted({str(r["algorithm"]) for r in usable})
+    algorithms = ordered_algorithms({str(r["algorithm"]) for r in usable})
     legend_y = plot["y1"] + margin["bottom"] + 8
     legend_w = plot_w
     total_legend_h = legend_height(len(algorithms))
@@ -335,13 +520,10 @@ def line_chart(
             )
             parts.append(
                 f'<path d="{path_data}" fill="none" stroke="{color}" stroke-width="3" '
-                f'stroke-linejoin="round" stroke-linecap="round"/>'
+                f'stroke-linejoin="round" stroke-linecap="round"{line_dash_attribute(algorithm)}/>'
             )
         for x, y in points:
-            parts.append(
-                f'<circle cx="{fmt(x)}" cy="{fmt(y)}" r="5" fill="{color}" '
-                f'stroke="#fff" stroke-width="1.8"/>'
-            )
+            parts.append(marker_svg(MARKERS.get(algorithm, "circle"), x, y, color, 6.0))
 
     parts.extend(render_legend(algorithms, plot["x0"], legend_y, legend_w))
     write(output, svg_document(width, height, title, subtitle, parts_to_string(parts)))
@@ -352,7 +534,7 @@ def parts_to_string(parts: Iterable[str]) -> str:
 
 
 def verification_matrix(rows: list[dict[str, object]], output: Path) -> None:
-    algorithms = sorted({str(r["algorithm"]) for r in rows})
+    algorithms = ordered_algorithms({str(r["algorithm"]) for r in rows})
     digits = sorted({int(r["digits"]) for r in rows})
     lookup = {(str(r["algorithm"]), int(r["digits"])): r for r in rows}
     cell_w = max(96, min(128, int(720 / max(1, len(digits)))))
@@ -367,7 +549,7 @@ def verification_matrix(rows: list[dict[str, object]], output: Path) -> None:
     parts = [
         f'<rect width="{width}" height="{height}" fill="#fff"/>',
         '<text class="title" x="40" y="38">Verification matrix</text>',
-        '<text class="subtitle" x="40" y="58">Green = supported and verified; gray = unsupported cap; red = failed.</text>',
+        '<text class="subtitle" x="40" y="58">Green = verified; gray = unsupported cap; slate = not run; red = failed.</text>',
         f'<text class="label" x="{fmt(x0 + plot_w / 2)}" y="84" text-anchor="middle">Decimal digits</text>',
     ]
 
@@ -385,16 +567,19 @@ def verification_matrix(rows: list[dict[str, object]], output: Path) -> None:
             f'text-anchor="end">{html.escape(LABELS.get(algorithm, algorithm))}</text>'
         )
         for col, digit in enumerate(digits):
-            r = lookup.get((algorithm, digit), {"supported": "false", "verified": "false"})
+            r = lookup.get((algorithm, digit))
             x = x0 + col * cell_w + 6
-            supported = r["supported"] in ("true", True)
-            verified = r["verified"] in ("true", True)
-            if supported and verified:
-                fill, label = OK, "OK"
-            elif not supported:
-                fill, label = SKIP, "skip"
+            if r is None:
+                fill, label = NOT_RUN, "n/r"
             else:
-                fill, label = FAIL, "fail"
+                supported = r["supported"] in ("true", True)
+                verified = r["verified"] in ("true", True)
+                if supported and verified:
+                    fill, label = OK, "OK"
+                elif not supported:
+                    fill, label = SKIP, "skip"
+                else:
+                    fill, label = FAIL, "fail"
             parts.append(
                 f'<rect x="{fmt(x)}" y="{fmt(y)}" width="{cell_w - 12}" height="{cell_h - 8}" '
                 f'rx="6" fill="{fill}"/>'
@@ -406,8 +591,10 @@ def verification_matrix(rows: list[dict[str, object]], output: Path) -> None:
 
     legend_y = y0 + len(algorithms) * cell_h + 24
     parts.append(f'<rect class="legend-box" x="36" y="{legend_y}" width="{width - 72}" height="36" rx="8"/>')
-    for i, (fill, label) in enumerate(((OK, "verified"), (SKIP, "unsupported"), (FAIL, "failed"))):
-        x = 56 + i * 180
+    for i, (fill, label) in enumerate(
+        ((OK, "verified"), (SKIP, "unsupported"), (NOT_RUN, "not run"), (FAIL, "failed"))
+    ):
+        x = 56 + i * 160
         parts.append(f'<rect x="{x}" y="{legend_y + 10}" width="18" height="18" rx="4" fill="{fill}"/>')
         parts.append(f'<text class="legend" x="{x + 28}" y="{legend_y + 24}">{label}</text>')
 
@@ -431,7 +618,7 @@ def phase_breakdown(rows: list[dict[str, object]], digits: int, output: Path) ->
         if int(r["digits"]) == digits and r["supported"] and r["verified"]
         and float(r["wall_ms"]) > 0
     ]
-    usable.sort(key=lambda r: float(r["wall_ms"]))
+    usable.sort(key=lambda r: (GROUP_LABELS.get(str(r["algorithm"]), "Other"), float(r["wall_ms"])))
     if not usable:
         return
     phases = [("split_ms", "#2155d9"), ("finalize_ms", "#dc2626"), ("format_ms", "#f59e0b")]
@@ -569,7 +756,7 @@ def hypothesis_progression(rows: list[dict[str, object]], output: Path) -> None:
         '<text class="title" x="40" y="38">Compute wall at 1,000,000 digits across the hypothesis ledger</text>',
         '<text class="subtitle" x="40" y="58">'
         "Metric: split + finalize + format (verify excluded). H0–H12: research-log dev ledger. "
-        "H13–H15: remeasured on current harness. Refuted: H5, H9b, H10.</text>",
+        "H13+ remeasured or refreshed on current harness. Refuted: H5, H9b, H10.</text>",
     ]
     for value in range(0, int(max_wall) + 1, 25):
         y = y_at(value)
@@ -682,7 +869,7 @@ Series methods report term counts; AGM reports iterations.
 
 ### Hypothesis ledger at 1M digits
 
-Compute wall (split + finalize + format; verify excluded) at 1M digits. H0–H12 from the research-log development ledger; H13–H15 remeasured on the current harness (dashed line marks the regime change). H13 optimizes verification only; H14 routes by scale; H15 adds merge-adaptive crown depth.
+Compute wall (split + finalize + format; verify excluded) at 1M digits. H0–H12 from the research-log development ledger; H13+ is remeasured or refreshed on the current harness (dashed line marks the regime change). H20 gives Arb the same scaled-verify/parallel-format pipeline; H22 retunes hybrid routing to use Arb from 10^6 digits.
 
 ![Hypothesis progression](hypothesis_progression.svg)
 

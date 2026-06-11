@@ -18,6 +18,7 @@ namespace satox {
 namespace {
 
 constexpr double kRamanujanDigitsPerTerm = 7.9825407783902;
+constexpr int kRamanujanMaxDigits = 10000000;
 
 HypergeometricBsSpec ramanujan_spec() {
     HypergeometricBsSpec spec;
@@ -35,7 +36,7 @@ class RamanujanAlgorithm final : public PiAlgorithm {
   public:
     AlgorithmMetadata metadata() const override {
         return {"ramanujan_classic_bs", "Ramanujan classical binary splitting", 1,
-                kMaxBenchmarkDigits,
+                kRamanujanMaxDigits,
                 true, false};
     }
 

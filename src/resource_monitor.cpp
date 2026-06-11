@@ -125,6 +125,7 @@ ResourceMonitor::ResourceMonitor() {
     const std::uint64_t blocks = ru_block_bytes();
     baseline_read_ = blocks;
     baseline_write_ = blocks;
+    baseline_energy_joules_ = read_rapl_joules();
 }
 
 ResourceMonitor::~ResourceMonitor() = default;
@@ -146,14 +147,15 @@ ResourceSnapshot ResourceMonitor::finish(double wall_seconds) {
     if (global_run_config().measure_energy) {
 #if defined(__linux__)
         const double end_j = read_rapl_joules();
-        if (end_j > 0.0) {
-            snap.energy_joules = end_j;
+        if (end_j > 0.0 && baseline_energy_joules_ > 0.0 && end_j >= baseline_energy_joules_) {
+            snap.energy_joules = end_j - baseline_energy_joules_;
             snap.energy_backend = "intel_rapl";
             if (wall_seconds > 0.0) {
                 snap.mean_power_watts = snap.energy_joules / wall_seconds;
             }
         }
 #else
+        (void)wall_seconds;
         snap.energy_backend = "unavailable";
 #endif
     }

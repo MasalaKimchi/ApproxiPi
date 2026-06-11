@@ -16,11 +16,9 @@ efficiency = (seconds × watts × bytes moved) / verified digits
 
 Also publish: digits/sec, digits/joule, digits/GB moved, verified digits/$.
 
-> **Open issue:** `wall_ms` and `total_cost_ms` use inconsistent timer boundaries
-> across algorithms (SATO-X includes verify in `wall_ms`; external baselines do not;
-> `total_cost_ms` double-counts verify for SATO-X). Do not publish cross-family
-> wall-time rankings until this is fixed. See
-> [`docs/benchmark-timing-fairness.md`](benchmark-timing-fairness.md).
+`wall_ms` excludes the harness verification phase; `total_cost_ms` is normalized
+as `wall_ms + verify_ms + io_ms` in merged summaries. Use `total_cost_ms` for
+end-to-end rankings and `wall_ms` only for compute-path comparisons.
 
 ## Digit ladder
 
@@ -33,7 +31,7 @@ Publishable runs use `10^5, 10^6, 10^7, 10^8` decimal digits. Smoke tests may us
 | 1 | `chudnovsky_naive` | Term-by-term summation cliff (capped at 10^5) |
 | 2 | `chudnovsky_recurrence` | Blocked recurrence without binary tree (capped at 10^4) |
 | 2 | `chudnovsky_bs` | Serious Chudnovsky binary-splitting baseline |
-| 3 | `ramanujan_classic_bs` | Convergence comparison |
+| 3 | `ramanujan_classic_bs` | Convergence comparison (capped at 10^7 pending 10^8 failure analysis) |
 
 SATO-X stack: `chudnovsky_bs_valuation`, `chudnovsky_bs_crown`, `chudnovsky_bs_crown_tuned`.
 

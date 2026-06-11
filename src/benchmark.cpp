@@ -253,6 +253,8 @@ ResultStats summarize_results(std::vector<ComputeResult> results) {
     stats.representative.finalize_ms = stats.median_finalize_ms;
     stats.representative.format_ms = stats.median_format_ms;
     stats.representative.verify_ms = stats.median_verify_ms;
+    stats.representative.total_cost_ms =
+        stats.median_wall_ms + stats.median_verify_ms + stats.representative.io_ms;
     return stats;
 }
 

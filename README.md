@@ -17,8 +17,7 @@ the benchmark summary for independent verification but are not timed against ful
 prefix algorithms. Protocol:
 [`docs/benchmark-protocol.md`](docs/benchmark-protocol.md). Methods:
 [`docs/methods-comparison.md`](docs/methods-comparison.md). Paper:
-[`docs/PAPER.md`](docs/PAPER.md). **Open:** benchmark timer-boundary fairness
-([`docs/benchmark-timing-fairness.md`](docs/benchmark-timing-fairness.md)).
+[`docs/PAPER.md`](docs/PAPER.md).
 
 ## Build
 
@@ -211,12 +210,13 @@ bin/satox-bench --ablation no_binary_split --digits 100000 --algorithms chudnovs
   change it, enforced by an integer range check with a re-render fallback).
   H13 adds pre-format scaled-integer verification (one `mpfr_const_pi` at
   `V = min(D, 10^6)` instead of five redundant full-precision round-trips).
-  Verified through 10^8 digits; ~3.6x faster than `chudnovsky_bs` at 10^6
-  total cost on this machine. Hypothesis ledger (H1–H13) and H14+ frontier
-  sketches are in `docs/research-log.md`.
+  Verified through 10^8 digits; ~2.8x faster than `chudnovsky_bs` at 10^6
+  total cost on this machine in the latest focused refresh. Hypothesis ledger
+  (H1–H22) is in `docs/research-log.md`.
 - `chudnovsky_bs_crown_tuned`: the same kernel driven by the cached autotune
   profile (only listed when `results/tuning.json` exists).
-- `ramanujan_classic_bs`: classical Ramanujan series with binary splitting.
+- `ramanujan_classic_bs`: classical Ramanujan series with binary splitting
+  (verified through 10^7; capped there after 10^8 failed even with large guard).
 - `machin_arctan`: independent Machin arctangent identity comparator.
 - `gauss_legendre_agm`: quadratic-convergent AGM comparator.
 - `borwein_cubic`: cubic-convergent Borwein comparator.
@@ -225,6 +225,8 @@ bin/satox-bench --ablation no_binary_split --digits 100000 --algorithms chudnovs
   trial, run through the same format/verify pipeline.
 - `arb_const_pi`: external baseline; FLINT/Arb's pi with a cold cache per
   trial and all hardware threads granted (requires FLINT at build time).
+- `chudnovsky_hybrid`: scale-aware router; uses the crown below 10^6 digits
+  and `arb_const_pi` at 10^6+ when FLINT is built.
 
 SATO-X discovery is not yet implemented as a proof-producing formula search
 engine. The current project is the benchmark and verification substrate needed

@@ -200,6 +200,11 @@ use crown where it wins, Arb where merge-bound.
 | **H17** | Higher digits/term Ramanujan–Sato | Another dimension | New formula with d/term > 14.18 beats crown asymptotically by ≥10% at 10^8 | `satox-score` promote + benchmark still loses to Chudnovsky at 10^7 | split_ms (series terms) |
 | **H18** | RAPL / powermetrics energy column | Universality | Populates digits/J; reveals crown vs Arb efficiency crossover ≠ wall crossover | Instrumentation noise >20%; or all-zero on Apple Silicon without sudo | efficiency table (not wall) |
 | **H19** | Entropy-weighted chunk tree | Local quality + Segmentation | Asymmetric chunk sizes from per-subtree `shift_lb` gradient reduce merge bit-volume ≥8% at 10^7 vs uniform binary partition | mul_bit_volume unchanged and merge_ms ≥ baseline; or verify fails from mis-sized truncation | merge_ms + mul_bit_volume |
+| **H20** | External baseline pipeline reuse | Universality + Prior action | Give MPFR/Arb the H13 scaled verify and parallel decimal renderer; Arb wall improves ≥15% at 10^6 and total improves ≥5x | Arb wall remains ≥ old wall or verify still dominates total | Arb wall/total |
+| **H21** | Shared reference integer cache | Taking out + Universality | One `floor(pi*10^V)` reference per `(V, guard)` precision; repeated same-precision rows avoid cold MPFR reference rebuild | Verify medians stay at hundreds of ms after first row | verify_ms |
+| **H22** | Retuned hybrid crossover | Separation in scale | After H20/H21, route to Arb from 10^6 digits; hybrid should match best delegate at 10^6 and 10^7 | Crown still beats Arb by >5% at 10^6/10^7 | hybrid wall/total |
+| **H23** | Measurement hygiene | Taking out | Normalize `total_cost_ms = wall_ms + verify_ms + io_ms` and recompute relative wall time on every merge | Any supported row has `total_cost_ms < wall_ms`; relative rows stay zero with a baseline present | benchmark CSV invariants |
+| **H24** | Ramanujan 100M guard falsifier | Parameter change | If failure is only guard budget, guard 100 or 1000 should verify | Same prefix hash fails at guard 100 and 1000 | correctness cap |
 
 ### H15 prototype (`chudnovsky_bs_crown_h15`)
 
@@ -230,3 +235,51 @@ at 10^8 where merge is 6264 ms vs chunks 3450 ms.
 
 **Files:** `include/satox/crown.hpp`, `src/crown.cpp`, `src/chudnovsky_crown.cpp`,
 `include/satox/algorithm.hpp`, `src/benchmark.cpp`.
+
+### H20-H22 external pipeline and routing refresh
+
+**TRIZ framing:** The old harness applied the strongest verification/formatting
+ideas only to the in-repo crown path. That created an artificial contradiction:
+external references were useful as speed controls but paid a weaker, slower
+post-format verification tax. H20 applies *universality* by reusing the scaled
+integer verifier and parallel decimal renderer for MPFR/Arb. H21 applies
+*taking out* by caching the trusted `floor(pi * 10^V)` reference once per
+precision/guard pair. H22 applies *separation in scale*: use crown where it wins
+through 10^5 digits and Arb where the refreshed external pipeline wins from
+10^6 upward.
+
+**Benchmark** (2 trials, 1 warmup, guard 25, Apple Silicon, focused refresh):
+
+| Digits | Algorithm | wall_ms | total_cost_ms | format_ms | verify_ms | Delegate | Verified |
+|---:|---|---:|---:|---:|---:|---|---|
+| 10^5 | crown | 7.7 | 8.5 | 0.7 | 0.9 | - | yes |
+| 10^5 | Arb | 8.9 | 9.6 | 1.2 | 0.9 | - | yes |
+| 10^6 | crown | 102.5 | 118.4 | 8.0 | 18.8 | - | yes |
+| 10^6 | Arb | **80.3** | **98.0** | 18.0 | 18.5 | - | yes |
+| 10^6 | hybrid | **78.5** | **94.8** | 16.9 | 17.3 | Arb | yes |
+| 10^7 | crown | 1669 | 1702 | 166 | 74.6 | - | yes |
+| 10^7 | Arb | **912** | **974** | 267 | 70.2 | - | yes |
+| 10^7 | hybrid | 968 | 1020 | 271 | 71.5 | Arb | yes |
+
+**Verdict:** H20 confirmed for Arb wall and total cost; H21 confirmed as an
+important benchmark-harness efficiency improvement; H22 confirmed on the tested
+scales. The hybrid crossover is now `10^6` digits when FLINT/Arb is built.
+This does not weaken correctness: external rows now use the same pre-format
+scaled-integer check as crown rows, with the emitted decimal prefix still
+hash-compared across rows by the benchmark outputs.
+
+### H23-H24 measurement hygiene and Ramanujan cap
+
+**H23 result:** Merged benchmark rows now recompute relative wall time against
+the current `chudnovsky_bs` row at each precision, and summarized rows set
+`total_cost_ms = wall_ms + verify_ms + io_ms`. A CSV invariant pass found no
+remaining supported rows with `total_cost_ms < wall_ms` and no missing matrix
+cells.
+
+**H24 result:** `ramanujan_classic_bs` at 10^8 failed exact-prefix verification
+with guard 25, guard 100, and guard 1000, producing the same failing prefix hash
+for the high-guard trials. That falsifies the simple "insufficient guard"
+explanation. The algorithm is capped at 10^7 until a focused derivation/kernel
+audit explains the 10^8 failure.
+
+**Current high-priority objectives:** see `docs/high-priority-objectives.md`.

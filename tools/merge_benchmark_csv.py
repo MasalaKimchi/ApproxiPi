@@ -41,6 +41,19 @@ def merge(inputs: list[Path], output: Path) -> list[dict[str, str]]:
         raise SystemExit("no benchmark rows to merge")
 
     rows = sorted(rows_by_key.values(), key=lambda r: (int(r["digits"]), r["algorithm"], r.get("notes") or ""))
+    baselines = {
+        row["digits"]: float(row.get("wall_ms") or 0)
+        for row in rows
+        if row.get("algorithm") == "chudnovsky_bs"
+        and row.get("supported") == "true"
+        and row.get("verified") == "true"
+        and float(row.get("wall_ms") or 0) > 0
+    }
+    for row in rows:
+        baseline = baselines.get(row["digits"], 0.0)
+        wall = float(row.get("wall_ms") or 0)
+        row["baseline"] = "chudnovsky_bs"
+        row["relative_wall_time"] = f"{(wall / baseline):.6f}" if baseline > 0 and wall > 0 else "0.000000"
     output.parent.mkdir(parents=True, exist_ok=True)
     with output.open("w", newline="") as handle:
         writer = csv.DictWriter(handle, fieldnames=header)
@@ -102,7 +115,7 @@ def write_summary(rows: list[dict[str, str]], output: Path, guard_digits: str = 
             "",
             "## Formula Spec Score Report",
             "",
-            "Wrote `results/satox-score.md` from `candidates/*.formula`.",
+            "Wrote `results/satox-score.md` from `formulas/specs/*.formula`.",
             "",
             "No SATO-X candidate is considered faster unless it is benchmarked, verified, and "
             "compared against the same Chudnovsky baseline.",

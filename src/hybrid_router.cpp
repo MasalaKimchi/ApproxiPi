@@ -7,9 +7,10 @@
 
 namespace satox {
 
-// Empirical crossover from results/summary.md and results/trials.csv: crown wins
-// at 10^5–10^7 wall time; arb_const_pi wins at 10^8 on this machine.
-constexpr int kHybridArbCrossoverDigits = 100'000'000;
+// Empirical crossover after H20/H21: crown wins through 10^5 digits, while
+// Arb wins wall and total cost from 10^6 upward once it uses the same
+// scaled-integer verification and parallel decimal renderer.
+constexpr int kHybridArbCrossoverDigits = 1'000'000;
 
 const char *hybrid_delegate_name(int decimal_digits) {
 #ifdef SATOX_HAVE_FLINT

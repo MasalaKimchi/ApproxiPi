@@ -17,6 +17,7 @@
 #include <flint/flint.h>
 #endif
 
+#include <future>
 #include <memory>
 #include <thread>
 
@@ -54,6 +55,10 @@ class MpfrConstPiAlgorithm final : public PiAlgorithm {
         mpfr_free_cache();
 
         const Timer timer;
+        DecimalPowerCache power_cache;
+        auto power_future = std::async(std::launch::async, [&]() {
+            build_decimal_power_cache(decimal_digits, power_cache);
+        });
         mpfr_t pi;
         mpfr_init2(pi, static_cast<mpfr_prec_t>(precision_bits));
         const Timer finalize_timer;
@@ -61,18 +66,24 @@ class MpfrConstPiAlgorithm final : public PiAlgorithm {
         result.finalize_ms = finalize_timer.wall_ms();
         result.terms_or_iterations = 1;
 
+        power_future.get();
+        mpfr_t pi_scaled;
+        mpfr_init2(pi_scaled, static_cast<mpfr_prec_t>(precision_bits));
+        mpfr_mul_z(pi_scaled, pi, power_cache.p10_full, MPFR_RNDN);
+
         const Timer format_timer;
-        result.decimal_prefix = mpfr_to_decimal_prefix(pi, decimal_digits);
+        result.decimal_prefix = scaled_pi_to_decimal_parallel(pi_scaled, decimal_digits,
+                                                              power_cache);
         result.format_ms = format_timer.wall_ms();
         result.wall_ms = timer.wall_ms();
         result.cpu_ms = timer.cpu_ms();
 
-        const Timer verify_timer;
-        result.verified = decimal_prefix_matches_pi(result.decimal_prefix, decimal_digits,
-                                                    effective_guard_digits);
-        result.verify_ms = verify_timer.wall_ms();
-        result.verification_method = "MPFR const_pi prefix (self-consistency; "
-                                     "cross-checked via prefix hash against other rows)";
+        result.verified = verify_scaled_pi_mpfr(pi_scaled, decimal_digits,
+                                                effective_guard_digits, &result.verify_ms);
+        result.verification_method =
+            "MPFR pre-format scaled-integer check (mpfr_const_pi)";
+        result.total_cost_ms = result.wall_ms + result.verify_ms;
+        mpfr_clear(pi_scaled);
         mpfr_clear(pi);
         return result;
     }
@@ -113,6 +124,10 @@ class ArbConstPiAlgorithm final : public PiAlgorithm {
         flint_cleanup();
 
         const Timer timer;
+        DecimalPowerCache power_cache;
+        auto power_future = std::async(std::launch::async, [&]() {
+            build_decimal_power_cache(decimal_digits, power_cache);
+        });
         arb_t pi;
         arb_init(pi);
         const Timer finalize_timer;
@@ -124,18 +139,25 @@ class ArbConstPiAlgorithm final : public PiAlgorithm {
         mpfr_init2(pi_mpfr, static_cast<mpfr_prec_t>(precision_bits));
         arf_get_mpfr(pi_mpfr, arb_midref(pi), MPFR_RNDN);
 
+        power_future.get();
+        mpfr_t pi_scaled;
+        mpfr_init2(pi_scaled, static_cast<mpfr_prec_t>(precision_bits));
+        mpfr_mul_z(pi_scaled, pi_mpfr, power_cache.p10_full, MPFR_RNDN);
+
         const Timer format_timer;
-        result.decimal_prefix = mpfr_to_decimal_prefix(pi_mpfr, decimal_digits);
+        result.decimal_prefix = scaled_pi_to_decimal_parallel(pi_scaled, decimal_digits,
+                                                              power_cache);
         result.format_ms = format_timer.wall_ms();
         result.wall_ms = timer.wall_ms();
         result.cpu_ms = timer.cpu_ms();
 
-        const Timer verify_timer;
-        result.verified = decimal_prefix_matches_pi(result.decimal_prefix, decimal_digits,
-                                                    effective_guard_digits);
-        result.verify_ms = verify_timer.wall_ms();
-        result.verification_method = "MPFR const_pi prefix";
+        result.verified = verify_scaled_pi_mpfr(pi_scaled, decimal_digits,
+                                                effective_guard_digits, &result.verify_ms);
+        result.verification_method =
+            "MPFR pre-format scaled-integer check (arb_const_pi)";
+        result.total_cost_ms = result.wall_ms + result.verify_ms;
 
+        mpfr_clear(pi_scaled);
         mpfr_clear(pi_mpfr);
         arb_clear(pi);
         return result;

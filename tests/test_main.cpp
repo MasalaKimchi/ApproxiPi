@@ -139,10 +139,11 @@ void test_csv_schema_extended() {
 void test_hybrid_delegate_routing() {
     assert(std::string(satox::hybrid_delegate_name(1000)) == "chudnovsky_bs_crown");
     assert(std::string(satox::hybrid_delegate_name(100000)) == "chudnovsky_bs_crown");
-    assert(std::string(satox::hybrid_delegate_name(10'000'000)) == "chudnovsky_bs_crown");
-    assert(std::string(satox::hybrid_delegate_name(99'999'999)) == "chudnovsky_bs_crown");
 #ifdef SATOX_HAVE_FLINT
-    assert(std::string(satox::hybrid_delegate_name(100'000'000)) == "arb_const_pi");
+    assert(std::string(satox::hybrid_delegate_name(1'000'000)) == "arb_const_pi");
+    assert(std::string(satox::hybrid_delegate_name(10'000'000)) == "arb_const_pi");
+#else
+    assert(std::string(satox::hybrid_delegate_name(10'000'000)) == "chudnovsky_bs_crown");
 #endif
 
     auto hybrid = satox::make_chudnovsky_hybrid_algorithm();

@@ -28,6 +28,7 @@ class ResourceMonitor {
     std::uint64_t peak_rss_ = 0;
     std::uint64_t baseline_read_ = 0;
     std::uint64_t baseline_write_ = 0;
+    double baseline_energy_joules_ = 0.0;
     std::uint64_t extra_read_ = 0;
     std::uint64_t extra_write_ = 0;
 };
