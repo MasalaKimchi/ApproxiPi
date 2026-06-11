@@ -28,6 +28,7 @@ std::vector<std::unique_ptr<PiAlgorithm>> make_default_algorithms() {
     algorithms.push_back(make_chudnovsky_algorithm());
     algorithms.push_back(make_chudnovsky_valuation_algorithm());
     algorithms.push_back(make_chudnovsky_crown_algorithm());
+    algorithms.push_back(make_chudnovsky_crown_h15_algorithm());
     // Only benchmark the tuned variant once a tuning profile exists.
     if (std::ifstream("results/tuning.json")) {
         algorithms.push_back(make_chudnovsky_crown_tuned_algorithm());
@@ -39,6 +40,7 @@ std::vector<std::unique_ptr<PiAlgorithm>> make_default_algorithms() {
     algorithms.push_back(make_borwein_quartic_algorithm());
     algorithms.push_back(make_mpfr_const_pi_algorithm());
     algorithms.push_back(make_arb_const_pi_algorithm());
+    algorithms.push_back(make_chudnovsky_hybrid_algorithm());
     return algorithms;
 }
 
@@ -488,6 +490,11 @@ int run_benchmark(const BenchmarkOptions &options) {
     md << "\nNo SATO-X candidate is considered faster unless it is benchmarked, verified, and "
           "compared against the same Chudnovsky baseline.\n";
     json << "\n]\n";
+
+    csv.close();
+    trials_csv.close();
+    json.close();
+    md.close();
 
     if (options.merge) {
         const std::string existing = options.output_dir + "/benchmark.csv";

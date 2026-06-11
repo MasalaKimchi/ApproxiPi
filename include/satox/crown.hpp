@@ -32,6 +32,12 @@ struct CrownTuning {
     mpfr_prec_t intra_node_parallel_bits = 1l << 19; // threshold for 3-way node
     unsigned int root_split_sixteenths = 9; // root left subtree weight (n/16)
     unsigned long leaf_block_terms = 8;    // iterative leaf block in chunks
+    // H15: when merge is expected to dominate chunks, allow one extra crown
+    // level so truncation reaches deeper into the exact-chunk layer.
+    bool merge_adaptive_depth = false;
+    unsigned long merge_adaptive_term_floor =
+        400000ul; // ~10^7 digits; merge/chunk crossover empirically ~3–5M terms
+    unsigned int merge_adaptive_extra_levels = 1;
 };
 
 bool load_crown_tuning(const std::string &path, CrownTuning &tuning);

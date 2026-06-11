@@ -6,7 +6,9 @@ from __future__ import annotations
 import argparse
 import csv
 import html
+import json
 import math
+import statistics
 from pathlib import Path
 from typing import Callable, Iterable
 
@@ -29,6 +31,7 @@ PALETTE = {
     "borwein_quartic": "#7c3aed",
     "mpfr_const_pi": "#475569",
     "arb_const_pi": "#0f766e",
+    "chudnovsky_hybrid": "#be123c",
 }
 
 LABELS = {
@@ -46,6 +49,7 @@ LABELS = {
     "borwein_quartic": "Borwein quartic",
     "mpfr_const_pi": "MPFR const_pi",
     "arb_const_pi": "FLINT/Arb const_pi",
+    "chudnovsky_hybrid": "Hybrid router (H14)",
 }
 
 GRID = "#d7dde8"
@@ -57,27 +61,43 @@ SKIP = "#94a3b8"
 FAIL = "#b91c1c"
 
 
+def safe_float(value: object, default: float = 0.0) -> float:
+    text = str(value or "").strip()
+    if not text:
+        return default
+    return float(text)
+
+
+def safe_int(value: object, default: int = 0) -> int:
+    text = str(value or "").strip()
+    if not text:
+        return default
+    return int(text)
+
+
 def load_rows(path: Path) -> list[dict[str, object]]:
     with path.open(newline="", encoding="utf-8") as handle:
         rows: list[dict[str, object]] = []
         for raw in csv.DictReader(handle):
             row: dict[str, object] = dict(raw)
-            row["digits"] = int(str(raw["digits"]))
-            row["guard_digits"] = int(str(raw["guard_digits"]))
-            row["supported"] = str(raw["supported"]).lower() == "true"
-            row["verified"] = str(raw["verified"]).lower() == "true"
-            row["wall_ms"] = float(str(raw["wall_ms"]))
-            row["cpu_ms"] = float(str(raw["cpu_ms"]))
-            row["terms_or_iterations"] = int(str(raw["terms_or_iterations"]))
-            row["estimated_digits_per_term"] = float(str(raw["estimated_digits_per_term"]))
-            row["relative_wall_time"] = float(str(raw["relative_wall_time"]))
-            row["split_ms"] = float(str(raw.get("split_ms", 0) or 0))
-            row["finalize_ms"] = float(str(raw.get("finalize_ms", 0) or 0))
-            row["format_ms"] = float(str(raw.get("format_ms", 0) or 0))
-            row["series_ms"] = float(str(raw.get("series_ms", 0) or 0))
-            row["mul_bit_volume"] = float(str(raw.get("mul_bit_volume", 0) or 0))
-            row["digits_per_sec"] = float(str(raw.get("digits_per_sec", 0) or 0))
-            row["digits_per_joule"] = float(str(raw.get("digits_per_joule", 0) or 0))
+            row["digits"] = safe_int(raw["digits"])
+            row["guard_digits"] = safe_int(raw["guard_digits"])
+            row["supported"] = str(raw.get("supported", "")).lower() == "true"
+            row["verified"] = str(raw.get("verified", "")).lower() == "true"
+            row["wall_ms"] = safe_float(raw.get("wall_ms"))
+            row["cpu_ms"] = safe_float(raw.get("cpu_ms"))
+            row["total_cost_ms"] = safe_float(raw.get("total_cost_ms"))
+            row["terms_or_iterations"] = safe_int(raw.get("terms_or_iterations"))
+            row["estimated_digits_per_term"] = safe_float(raw.get("estimated_digits_per_term"))
+            row["relative_wall_time"] = safe_float(raw.get("relative_wall_time"))
+            row["split_ms"] = safe_float(raw.get("split_ms"))
+            row["finalize_ms"] = safe_float(raw.get("finalize_ms"))
+            row["format_ms"] = safe_float(raw.get("format_ms"))
+            row["series_ms"] = safe_float(raw.get("series_ms"))
+            row["verify_ms"] = safe_float(raw.get("verify_ms"))
+            row["mul_bit_volume"] = safe_float(raw.get("mul_bit_volume"))
+            row["digits_per_sec"] = safe_float(raw.get("digits_per_sec"))
+            row["digits_per_joule"] = safe_float(raw.get("digits_per_joule"))
             if row["algorithm"] not in PERFORMANCE_EXCLUDE:
                 rows.append(row)
     return rows
@@ -481,27 +501,59 @@ def phase_breakdown(rows: list[dict[str, object]], digits: int, output: Path) ->
     )
 
 
-HYPOTHESIS_TIMELINE = [
-    ("H0 baseline", 144.2, "exact binary splitting"),
-    ("H1 crown", 130.5, "truncated MPFR crown"),
-    ("H2 pipeline", 92.6, "overlap constants + parallel format"),
-    ("H3 intra-node", 72.8, "parallel root products"),
-    ("H4 warm Newton", 69.9, "warm-start 1/T"),
-    ("H7 root-Q elision", 71.9, "never form root Q"),
-    ("H9a deeper crown", 68.2, "more chunks"),
-    ("H1-H9 final", 64.0, "hand-tuned configuration"),
-    ("H11 autotune", 62.7, "knob search (refuted: <2%)"),
-    ("H12 spliced prefix", 60.0, "render high half under Newton correction"),
-]
+HYPOTHESIS_LEDGER_PATH = Path("data/hypothesis_progression.json")
+# Index after H12 in the ledger (0-based); stages H13+ use remeasured benchmark compute_wall.
+HYPOTHESIS_REGIME_BREAK_AFTER = 9
 
 
-def hypothesis_progression(output: Path) -> None:
-    """Wall time at 1M digits across the hypothesis ledger (refutations omitted
-    where they were reverted)."""
+def compute_wall_ms(row: dict[str, object]) -> float:
+    return float(row["split_ms"]) + float(row["finalize_ms"]) + float(row["format_ms"])
+
+
+def median_compute_wall(
+    rows: list[dict[str, object]], algorithm: str, digits: int = 1_000_000
+) -> float | None:
+    values = [
+        compute_wall_ms(row)
+        for row in rows
+        if str(row["algorithm"]) == algorithm
+        and int(row["digits"]) == digits
+        and row["supported"]
+        and row["verified"]
+        and float(row["wall_ms"]) > 0
+    ]
+    if not values:
+        return None
+    return float(statistics.median(values))
+
+
+def load_hypothesis_timeline(rows: list[dict[str, object]]) -> list[tuple[str, float, str]]:
+    ledger_path = HYPOTHESIS_LEDGER_PATH
+    if not ledger_path.exists():
+        raise FileNotFoundError(f"missing hypothesis ledger: {ledger_path}")
+    ledger = json.loads(ledger_path.read_text(encoding="utf-8"))
+    digits = int(ledger.get("digits", 1_000_000))
+    timeline: list[tuple[str, float, str]] = []
+    for stage in ledger["stages"]:
+        wall = float(stage["compute_wall_ms"]) if "compute_wall_ms" in stage else None
+        algorithm = stage.get("algorithm")
+        if algorithm:
+            measured = median_compute_wall(rows, str(algorithm), digits)
+            if measured is not None:
+                wall = measured
+        if wall is None:
+            raise ValueError(f"no compute_wall for hypothesis stage {stage.get('id')}")
+        timeline.append((str(stage["name"]), wall, str(stage["description"])))
+    return timeline
+
+
+def hypothesis_progression(rows: list[dict[str, object]], output: Path) -> None:
+    """Compute wall (split+finalize+format) at 1M digits across the hypothesis ledger."""
+    timeline = load_hypothesis_timeline(rows)
     x0, y0, x1, y1 = 90, 90, 830, 380
     width = 1002
-    n = len(HYPOTHESIS_TIMELINE)
-    max_wall = max(w for _, w, _ in HYPOTHESIS_TIMELINE) * 1.18
+    n = len(timeline)
+    max_wall = max(w for _, w, _ in timeline) * 1.18
     legend_y = y1 + 56
     legend_h = legend_height(n, cols=2)
     height = int(legend_y + legend_h + 16)
@@ -514,8 +566,10 @@ def hypothesis_progression(output: Path) -> None:
 
     parts = [
         f'<rect width="{width}" height="{height}" fill="#fff"/>',
-        '<text class="title" x="40" y="38">Wall time at 1,000,000 digits across the hypothesis ledger</text>',
-        '<text class="subtitle" x="40" y="58">Verified medians; refuted hypotheses (H5, H9b, H10) were reverted.</text>',
+        '<text class="title" x="40" y="38">Compute wall at 1,000,000 digits across the hypothesis ledger</text>',
+        '<text class="subtitle" x="40" y="58">'
+        "Metric: split + finalize + format (verify excluded). H0–H12: research-log dev ledger. "
+        "H13–H15: remeasured on current harness. Refuted: H5, H9b, H10.</text>",
     ]
     for value in range(0, int(max_wall) + 1, 25):
         y = y_at(value)
@@ -525,16 +579,26 @@ def hypothesis_progression(output: Path) -> None:
     parts.append(f'<line class="axis" x1="{x0}" y1="{y0}" x2="{x0}" y2="{y1}"/>')
     parts.append(
         f'<text class="label" transform="translate(28 {fmt(y0 + (y1 - y0) / 2)}) rotate(-90)" '
-        f'text-anchor="middle">Median wall (ms)</text>'
+        f'text-anchor="middle">Compute wall (ms)</text>'
     )
     parts.append(f'<text class="label" x="{fmt(x0 + (x1 - x0) / 2)}" y="{fmt(y1 + 36)}" text-anchor="middle">Hypothesis stage</text>')
 
-    points = [(x_at(i), y_at(w)) for i, (_, w, _) in enumerate(HYPOTHESIS_TIMELINE)]
+    if HYPOTHESIS_REGIME_BREAK_AFTER < n - 1:
+        break_x = x_at(HYPOTHESIS_REGIME_BREAK_AFTER) + (x_at(HYPOTHESIS_REGIME_BREAK_AFTER + 1) - x_at(HYPOTHESIS_REGIME_BREAK_AFTER)) / 2
+        parts.append(
+            f'<line x1="{fmt(break_x)}" y1="{fmt(y0)}" x2="{fmt(break_x)}" y2="{fmt(y1)}" '
+            f'stroke="#94a3b8" stroke-width="1.5" stroke-dasharray="6 4"/>'
+        )
+        parts.append(
+            f'<text class="tick" x="{fmt(break_x)}" y="{fmt(y0 - 8)}" text-anchor="middle" fill="{MUTED}">remeasured</text>'
+        )
+
+    points = [(x_at(i), y_at(w)) for i, (_, w, _) in enumerate(timeline)]
     path_data = " ".join(("M" if i == 0 else "L") + f"{fmt(x)} {fmt(y)}" for i, (x, y) in enumerate(points))
     parts.append(
         f'<path d="{path_data}" fill="none" stroke="#dc2626" stroke-width="3" stroke-linejoin="round"/>'
     )
-    for i, ((x, y), (name, wall, desc)) in enumerate(zip(points, HYPOTHESIS_TIMELINE)):
+    for i, ((x, y), (name, wall, desc)) in enumerate(zip(points, timeline)):
         parts.append(
             f'<circle cx="{fmt(x)}" cy="{fmt(y)}" r="5" fill="#dc2626" stroke="#fff" stroke-width="1.8"/>'
         )
@@ -549,7 +613,7 @@ def hypothesis_progression(output: Path) -> None:
     legend_box_w = width - 72
     parts.append(f'<rect class="legend-box" x="36" y="{legend_y}" width="{legend_box_w}" height="{box_h}" rx="8"/>')
     col_w = (legend_box_w - 32) / 2
-    for i, (name, wall, desc) in enumerate(HYPOTHESIS_TIMELINE):
+    for i, (name, wall, desc) in enumerate(timeline):
         col = i // rows
         row = i % rows
         x = 52 + col * (col_w + 16)
@@ -567,7 +631,7 @@ def hypothesis_progression(output: Path) -> None:
             width,
             height,
             "Hypothesis ledger progression",
-            "Median verified wall time at one million digits after each confirmed hypothesis.",
+            "Compute wall (split+finalize+format) at one million digits after each hypothesis stage.",
             parts_to_string(parts),
         ),
     )
@@ -618,7 +682,7 @@ Series methods report term counts; AGM reports iterations.
 
 ### Hypothesis ledger at 1M digits
 
-Wall-time improvements from the optimization hypothesis sequence. Numbered stages are explained in the legend below the chart.
+Compute wall (split + finalize + format; verify excluded) at 1M digits. H0–H12 from the research-log development ledger; H13–H15 remeasured on the current harness (dashed line marks the regime change). H13 optimizes verification only; H14 routes by scale; H15 adds merge-adaptive crown depth.
 
 ![Hypothesis progression](hypothesis_progression.svg)
 
@@ -715,7 +779,7 @@ def main() -> int:
     cost_rows = [r for r in rows if float(r.get("series_ms") or 0) > 0 or float(r.get("split_ms") or 0) > 0]
     if cost_rows:
         phase_breakdown(cost_rows, breakdown_digits, output_dir / "cost_breakdown_stacked.svg")
-    hypothesis_progression(output_dir / "hypothesis_progression.svg")
+    hypothesis_progression(rows, output_dir / "hypothesis_progression.svg")
     verification_matrix(rows, output_dir / "verification_matrix.svg")
     index_markdown(output_dir)
     print(f"Wrote optimized SVG figures to {output_dir}")

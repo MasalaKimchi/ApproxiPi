@@ -31,6 +31,7 @@ SRC = \
 	src/external_baselines.cpp \
 	src/formula_spec.cpp \
 	src/format.cpp \
+	src/hybrid_router.cpp \
 	src/machin.cpp \
 	src/memory_estimate.cpp \
 	src/ramanujan.cpp \

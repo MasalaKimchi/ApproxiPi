@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <cmath>
 #include <cstdlib>
 #include <fstream>
 #include <future>
@@ -43,10 +44,28 @@ struct CrownNode {
     }
 };
 
+bool merge_expected_to_dominate_chunks(unsigned long terms) {
+    // Empirical merge/chunk ratio from crown notes at 10^6..10^8 scales as
+    // roughly (terms / 500k)^1.5 * 0.05; crosses 1.0 near 3–5M terms.
+    if (terms < 100000ul) {
+        return false;
+    }
+    const double scaled = static_cast<double>(terms) / 500000.0;
+    const double ratio = 0.05 * scaled * std::sqrt(scaled);
+    return ratio >= 1.0;
+}
+
 unsigned int choose_crown_depth(unsigned long terms, const CrownTuning &tuning) {
+    CrownTuning active = tuning;
+    if (tuning.merge_adaptive_depth &&
+        (terms >= tuning.merge_adaptive_term_floor ||
+         merge_expected_to_dominate_chunks(terms))) {
+        active.max_crown_depth =
+            std::min(15u, tuning.max_crown_depth + tuning.merge_adaptive_extra_levels);
+    }
     unsigned int depth = 0;
-    while (depth < tuning.max_crown_depth &&
-           (terms >> (depth + 1u)) >= std::max(1ul, tuning.min_chunk_terms)) {
+    while (depth < active.max_crown_depth &&
+           (terms >> (depth + 1u)) >= std::max(1ul, active.min_chunk_terms)) {
         ++depth;
     }
     return depth;

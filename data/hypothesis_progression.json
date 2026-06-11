@@ -1,0 +1,21 @@
+{
+  "digits": 1000000,
+  "metric": "compute_wall_ms",
+  "metric_definition": "split_ms + finalize_ms + format_ms (verification excluded)",
+  "notes": "H0-H12: compute wall from docs/research-log.md development ledger (5 trials, pre-H13 harness). H13-H15: median compute_wall remeasured on current host; H13 changes verify only, not the series kernel.",
+  "stages": [
+    {"id": "H0", "name": "H0 baseline", "compute_wall_ms": 144.2, "source": "research-log", "description": "exact binary splitting"},
+    {"id": "H1", "name": "H1 crown", "compute_wall_ms": 130.5, "source": "research-log", "description": "truncated MPFR crown"},
+    {"id": "H2", "name": "H2 pipeline", "compute_wall_ms": 92.6, "source": "research-log", "description": "overlap constants + parallel format"},
+    {"id": "H3", "name": "H3 intra-node", "compute_wall_ms": 72.8, "source": "research-log", "description": "parallel root products"},
+    {"id": "H4", "name": "H4 warm Newton", "compute_wall_ms": 69.9, "source": "research-log", "description": "warm-start 1/T"},
+    {"id": "H7", "name": "H7 root-Q elision", "compute_wall_ms": 71.9, "source": "research-log", "description": "never form root Q"},
+    {"id": "H9a", "name": "H9a deeper crown", "compute_wall_ms": 68.2, "source": "research-log", "description": "more chunks"},
+    {"id": "H9", "name": "H1-H9 final", "compute_wall_ms": 64.0, "source": "research-log", "description": "hand-tuned configuration"},
+    {"id": "H11", "name": "H11 autotune", "compute_wall_ms": 62.7, "source": "research-log", "description": "knob search (refuted: <2%)"},
+    {"id": "H12", "name": "H12 spliced prefix", "compute_wall_ms": 59.9, "source": "research-log", "description": "render high half under Newton correction"},
+    {"id": "H13", "name": "H13 pre-format verify", "algorithm": "chudnovsky_bs_crown", "source": "benchmark", "description": "scaled-integer verify before format (compute unchanged)"},
+    {"id": "H14", "name": "H14 hybrid router", "algorithm": "chudnovsky_hybrid", "source": "benchmark", "description": "crown below 10^8, arb at 10^8+"},
+    {"id": "H15", "name": "H15 merge-adaptive depth", "algorithm": "chudnovsky_bs_crown_h15", "source": "benchmark", "description": "+1 crown level when term scale is large"}
+  ]
+}

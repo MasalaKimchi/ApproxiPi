@@ -42,7 +42,7 @@ Series methods report term counts; AGM reports iterations.
 
 ### Hypothesis ledger at 1M digits
 
-Wall-time improvements from the optimization hypothesis sequence. Numbered stages are explained in the legend below the chart.
+Compute wall (split + finalize + format; verify excluded) at 1M digits. H0–H12 from the research-log development ledger; H13–H15 remeasured on the current harness (dashed line marks the regime change). H13 optimizes verification only; H14 routes by scale; H15 adds merge-adaptive crown depth.
 
 ![Hypothesis progression](hypothesis_progression.svg)
 

@@ -8,6 +8,7 @@
 
 #include <cassert>
 #include <iostream>
+#include <string>
 
 namespace {
 
@@ -134,6 +135,23 @@ void test_csv_schema_extended() {
     assert(satox::csv_header().find("peak_rss_bytes") != std::string::npos);
 }
 
+void test_hybrid_delegate_routing() {
+    assert(std::string(satox::hybrid_delegate_name(1000)) == "chudnovsky_bs_crown");
+    assert(std::string(satox::hybrid_delegate_name(100000)) == "chudnovsky_bs_crown");
+    assert(std::string(satox::hybrid_delegate_name(10'000'000)) == "chudnovsky_bs_crown");
+    assert(std::string(satox::hybrid_delegate_name(99'999'999)) == "chudnovsky_bs_crown");
+#ifdef SATOX_HAVE_FLINT
+    assert(std::string(satox::hybrid_delegate_name(100'000'000)) == "arb_const_pi");
+#endif
+
+    auto hybrid = satox::make_chudnovsky_hybrid_algorithm();
+    assert(hybrid->metadata().name == "chudnovsky_hybrid");
+    const satox::ComputeResult small = hybrid->compute(100, 25);
+    assert(small.supported);
+    assert(small.verified);
+    assert(small.notes.find("delegate=chudnovsky_bs_crown") != std::string::npos);
+}
+
 } // namespace
 
 int main() {
@@ -148,6 +166,7 @@ int main() {
     test_output_schema_helpers();
     test_generic_binary_splitting();
     test_formula_specs();
+    test_hybrid_delegate_routing();
     std::cout << "satox-tests: all tests passed\n";
     return 0;
 }

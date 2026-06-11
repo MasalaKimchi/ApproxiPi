@@ -27,9 +27,11 @@ HypergeometricBsSpec chudnovsky_crown_spec() {
 class ChudnovskyCrownAlgorithm final : public PiAlgorithm {
   public:
     ChudnovskyCrownAlgorithm() = default;
-    ChudnovskyCrownAlgorithm(std::string name, std::string family, std::string tuning_path)
+    ChudnovskyCrownAlgorithm(std::string name, std::string family, std::string tuning_path,
+                             bool merge_adaptive_depth = false)
         : name_(std::move(name)), family_(std::move(family)),
-          tuning_path_(std::move(tuning_path)) {}
+          tuning_path_(std::move(tuning_path)),
+          merge_adaptive_depth_(merge_adaptive_depth) {}
 
     AlgorithmMetadata metadata() const override {
         return {name_, family_, 1, kMaxBenchmarkDigits, true, false};
@@ -54,11 +56,15 @@ class ChudnovskyCrownAlgorithm final : public PiAlgorithm {
         }
 
         CrownTuning tuning;
+        tuning.merge_adaptive_depth = merge_adaptive_depth_;
         const bool tuned = !tuning_path_.empty();
         if (tuned && !load_crown_tuning(tuning_path_, tuning)) {
             result.error = "no tuning profile at " + tuning_path_ +
                            " (run satox-bench --tune first)";
             return result;
+        }
+        if (merge_adaptive_depth_) {
+            tuning.merge_adaptive_depth = true;
         }
 
         result.supported = true;
@@ -169,8 +175,10 @@ class ChudnovskyCrownAlgorithm final : public PiAlgorithm {
         CrownStats crown_stats{};
         const HypergeometricBsSpec spec = chudnovsky_crown_spec();
         const Timer split_timer;
+        const CrownTuning *crown_tuning =
+            (tuned || merge_adaptive_depth_) ? &tuning : nullptr;
         binary_split_crown(spec, terms, q, t, &crown_stats, pipelined ? &warm_hook : nullptr,
-                           tuned ? &tuning : nullptr);
+                           crown_tuning);
         result.split_ms = split_timer.wall_ms();
         result.gcd_reductions = crown_stats.split.gcd_reductions;
         result.cancelled_bits = crown_stats.split.cancelled_bits;
@@ -377,6 +385,7 @@ class ChudnovskyCrownAlgorithm final : public PiAlgorithm {
     std::string name_ = "chudnovsky_bs_crown";
     std::string family_ = "Chudnovsky binary splitting with truncated MPFR crown";
     std::string tuning_path_;
+    bool merge_adaptive_depth_ = false;
 };
 
 } // namespace
@@ -391,6 +400,13 @@ std::unique_ptr<PiAlgorithm> make_chudnovsky_crown_tuned_algorithm() {
         "chudnovsky_bs_crown_tuned",
         "Truncated crown with autotuned knob profile (results/tuning.json)",
         "results/tuning.json");
+}
+
+std::unique_ptr<PiAlgorithm> make_chudnovsky_crown_h15_algorithm() {
+    return std::make_unique<ChudnovskyCrownAlgorithm>(
+        "chudnovsky_bs_crown_h15",
+        "Truncated crown with H15 merge-adaptive depth (+1 level when merge dominates)",
+        "", true);
 }
 
 } // namespace satox

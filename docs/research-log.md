@@ -67,6 +67,7 @@ were co-dominant and untouched by classical series-side optimizations.
 | H11 | Autotuning the crown knob space (leaf block, chunk depth, parallel levels, intra-node threshold, root split) via coordinate descent, profile cached to `results/tuning.json` | >=5% wall at 1M | 64.0 -> 62.7 ms (-2%), within run noise; the hand-derived H1-H9 configuration is already a local optimum | refuted (marginal) |
 | H12 | Spliced-prefix formatting: after `pi0 = N*r0`, the Newton correction only perturbs digits below the warm-bits horizon (~557k of 1M), so divmod + high-half rendering run concurrently with the residual/correction products; the corrected low half is recovered by integer subtraction (`low = z_corr - (z0 - low0)`) whose range check 0 <= low < 10^(4w) *proves* the splice exact, with full re-render fallback | 8-12% wall at 1M | wall 64.0 -> 59.9 ms (-6.4%), format 16.0 -> 13.4 ms; verified | confirmed (low end) |
 | H13 | Pre-format scaled-integer verification: compare `floor(pi_computed * 10^V)` to `floor(const_pi * 10^V)` in MPFR before decimal rendering, with `V = min(D, 10^6)` and reference precision capped at `V`; eliminates five redundant `mpfr_const_pi` passes and million-digit decimal round-trips | verify -80% at 1M total; 10^8 must verify | 1M verify 229 -> 11 ms, total 322 -> 104 ms (3.1x vs BS); 10^8 wall 96.3 -> 29.5 s (3.3x), verify 139 s -> 1.1 s, **verified** | confirmed |
+| H14 | Hybrid router (`chudnovsky_hybrid`): crown below 10^8 digits, `arb_const_pi` at and above when FLINT is built | matches best delegate per scale; 10^8 wall within ~10% of arb | 10^5 hybrid 6.6 ms (crown 6.6, arb 10.3); 10^6 hybrid 93 ms (crown 82, arb 105); 10^7 hybrid 1608 ms (crown 1555, arb 1562); 10^8 hybrid 24.2 s (crown 29.8, arb 21.5); all verified | partial |
 
 ## Error-budget notes (why the truncations are safe)
 
@@ -119,18 +120,113 @@ were co-dominant and untouched by classical series-side optimizations.
 
 ## H14+ frontier (not yet attempted)
 
-H13 closed the verification cliff through 10^8 digits. The crown compute path
-is now the binding constraint at scale; knob sweeps (H11) are exhausted.
-Plausible next hypotheses, each needing a predicted effect size and falsifier:
+H13 closed the verification cliff through 10^8 digits. H14 implemented a
+scale-aware `chudnovsky_hybrid` router (crown below 10^8, arb at 10^8+).
+Single-threshold routing matches crown at 10^5–10^7 and arb-class wall time
+at 10^8; a lower crossover (~10^7) might help when arb wins on wall time at
+10^7 in some runs. Plausible next hypotheses:
 
 | # | Hypothesis sketch | Why it might matter | Risk |
 |---|---|---|---|
-| H14 | Hybrid router: `arb_const_pi` below ~10^8, crown at and above (or per-digit crossover table) | FLINT/Arb wins 10^8 on this machine (21.6 s vs 28.2 s crown) while crown dominates 10^5–10^7 | Product complexity; not a single-kernel win |
-| H15 | Crown merge restructuring at 10^7+: deeper truncation into the exact-chunk layer when merge > chunks | Merge is ~40% of crown wall at 10^7; bit-volume savings were only ~7% in H1 | May oversubscribe cores (cf. refuted H9b) |
+| H15 | Crown merge restructuring: merge-adaptive depth (+1 level) | Merge ~64% of split at 10^8; prototype −8% wall at 10^7 even when merge<chunks | Trigger predicate needs retune; may oversubscribe (cf. H9b) |
 | H16 | Independent BBP hex spot checks in parallel with H13 MPFR verify | Cheap entropy cross-check; catches bugs H13 cannot | Adds harness complexity; spots are sparse |
 | H17 | New Ramanujan–Sato formula with higher digits/term than Chudnovsky | Only path to beat Chudnovsky asymptotics; `satox-score` has no promote candidate yet | Research-heavy; proof certificate required |
 | H18 | Energy / $ efficiency instrumentation (RAPL, `powermetrics`) | Efficiency table columns are zero today; publish digits/J and verified digits/$ | Platform-dependent; not wall-time |
 
 **Do not expect** another 2x from crown knob tuning alone. The next wall-time
-wins likely require either a different algorithm family (H14/H17) or a new
-binding-constraint diagnosis on the merge/chunk phase at 10^7+ (H15).
+wins likely require either a different algorithm family (H17) or merge-phase
+restructuring at 10^8+ where merge now dominates chunks (H15 prototype below).
+
+## TRIZ analysis (H15+)
+
+### Physical contradictions (from phase columns)
+
+Crown `chudnovsky_bs_crown` phase shares at representative scales
+(`results/benchmark.csv`, notes field for chunk/merge split):
+
+| Digits | split_ms | chunks | merge | finalize_ms | format_ms | verify_ms | Binding phase |
+|---:|---:|---:|---:|---:|---:|---:|---|
+| 10^5 | 4.9 | 3.1 | 1.3 | 1.0 | 0.5 | 12.3 | verify (harness) |
+| 10^6 | 50.7 | 33 | 17 | 15.9 | 8.0 | 220* | split ≈ verify† |
+| 10^7 | 1033 | 782 | 247 | 276 | 156 | 306 | split (merge rising) |
+| 10^8 | 9715 | 3450 | **6264** | 2713 | 13 | 143928‡ | **merge** (40%+ of split) |
+
+\*noisy trial in latest CSV; stable runs ~11 ms post-H13.  
+†H13 reduced verify to ~11 ms; split is binding again at 10^6.  
+‡10^8 row failed exact-prefix verify in one run; merge/chunk ratio still diagnostic.
+
+**Contradiction A — speed vs memory:** Deeper crown (more, smaller chunks) cuts
+merge operand width but multiplies chunk temporaries and scheduling metadata.
+At 10^8, peak RSS is already 2.1 GiB for crown vs 1.75 GiB for baseline.
+
+**Contradiction B — parallelism vs overhead:** Chunk phase saturates all cores
+(H9b, H10 refuted). Any overlapped work must fit *real idle* cycles — format
+(156 ms at 10^7) and finalize (276 ms) are the only sizable holes while split
+runs; verify is now cheap post-H13.
+
+**Contradiction C — exactness vs operand width:** H1 truncation removes only
+~7% of `mul_bit_volume`; wall wins come from restructuring (smaller top
+operands, pipelining), not raw work elimination. Pushing truncation deeper
+(merge-adaptive depth) trades exact-chunk work for shorter MPFR merge chains.
+
+**Contradiction D — verify rigor vs cost:** H13 closed the verify cliff; further
+gains must come from compute, not weaker checks. Independent cross-checks
+(BBP spots) add harness cost unless hidden under idle (Contradiction B).
+
+**Contradiction E — single kernel vs routing:** At 10^8 on this machine Arb
+(21.6 s) beats crown (28.2 s wall in research-log table; merge-dominated split
+in CSV). H14 hybrid routing is the TRIZ *separation in time/space* resolution:
+use crown where it wins, Arb where merge-bound.
+
+### TRIZ principles mapped
+
+| Principle | Application here |
+|---|---|
+| **Segmentation** | H15: split exact layer into more chunks when merge dominates; H14: route by digit scale |
+| **Prior action** | H12 splice renders stable high half before correction finishes; H4 warm Newton |
+| **Local quality** | Per-node `needed_precision` from contribution offset; asymmetric 9/16 root split |
+| **Nested doll** | Exact chunks inside truncated MPFR crown inside pipelined finalize/format |
+| **Another dimension** | H17: change formula family (digits/term), not just kernel knobs |
+| **Dynamics** | H15: depth adapts to term scale / predicted merge:chunk ratio |
+| **Universality** | H13 scaled-integer verify works for all algorithms in harness |
+| **Cheap shortcuts** | H16 BBP spots — only if overlapped, not on critical path |
+
+### Hypotheses H15–H19 (falsifiable)
+
+| # | Name | TRIZ principle | Prediction | Falsifier | Binding constraint |
+|---|---|---|---|---|---|
+| **H15** | Merge-adaptive crown depth | Segmentation + Dynamics | When merge/chunk ≥ 1 (10^8), +1 crown level cuts merge ≥15% and wall ≥5%; at 10^7 with merge<chunk, ≤2% or regression | Wall not improved at 10^8 with depth 8→9; or chunk growth swamps merge at 10^7 | merge_ms at 10^8 |
+| **H16** | BBP spot verify during format idle | Prior action + Cheap shortcuts | Zero wall impact; catches class of bugs H13 misses; <5 ms amortized at 10^6 | Adds >1% wall at 10^6; or spots disagree with MPFR on valid run | verify_ms (must stay off critical path) |
+| **H17** | Higher digits/term Ramanujan–Sato | Another dimension | New formula with d/term > 14.18 beats crown asymptotically by ≥10% at 10^8 | `satox-score` promote + benchmark still loses to Chudnovsky at 10^7 | split_ms (series terms) |
+| **H18** | RAPL / powermetrics energy column | Universality | Populates digits/J; reveals crown vs Arb efficiency crossover ≠ wall crossover | Instrumentation noise >20%; or all-zero on Apple Silicon without sudo | efficiency table (not wall) |
+| **H19** | Entropy-weighted chunk tree | Local quality + Segmentation | Asymmetric chunk sizes from per-subtree `shift_lb` gradient reduce merge bit-volume ≥8% at 10^7 vs uniform binary partition | mul_bit_volume unchanged and merge_ms ≥ baseline; or verify fails from mis-sized truncation | merge_ms + mul_bit_volume |
+
+### H15 prototype (`chudnovsky_bs_crown_h15`)
+
+**Implementation:** `CrownTuning::merge_adaptive_depth` bumps `max_crown_depth` by
+one when `terms ≥ 400k` or empirical merge:chunk ratio ≥ 1. Algorithm variant
+`chudnovsky_bs_crown_h15` enables the flag; logic in `choose_crown_depth()`
+(`src/crown.cpp`).
+
+**Benchmark** (3 trials, 1 warmup, guard 25, Apple Silicon, 2025-06-10):
+
+| Digits | Algorithm | wall_ms | split_ms | depth | chunks† | merge† | Verified |
+|---:|---|---:|---:|---:|---:|---:|---|
+| 10^6 | crown | 80.3 | 48.8 | 7 | 30.8 | 16.7 | yes |
+| 10^6 | crown_h15 | 80.6 | 48.6 | 7 | 31.1 | 17.4 | yes |
+| 10^7 | crown | 1451 | 948 | 7 | 718 | 226 | yes |
+| 10^7 | crown_h15 | **1335** | **839** | **8** | 578 | 265 | yes |
+
+†ms from verification_method notes field.
+
+**Verdict: partly confirmed; trigger predicate refuted.** At 10^7, merge (226 ms)
+≪ chunks (718 ms), yet +1 depth improved wall **−8%** (1451 → 1335 ms) and split
+**−11%**, with merge rising only 17%. The narrow falsifier “only help when
+merge > chunk” is wrong at this scale; the broader segmentation win (shorter
+MPFR operands, better chunk parallelism) still holds. At 10^6 the floor does not
+fire (70k terms); parity within noise. **Next:** retune trigger to depth+1 only
+when `merge_expected_to_dominate_chunks()` (≈3–5M terms, ~10^8 digits); validate
+at 10^8 where merge is 6264 ms vs chunks 3450 ms.
+
+**Files:** `include/satox/crown.hpp`, `src/crown.cpp`, `src/chudnovsky_crown.cpp`,
+`include/satox/algorithm.hpp`, `src/benchmark.cpp`.

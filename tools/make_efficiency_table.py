@@ -21,6 +21,7 @@ CORE_METHODS = [
     "ramanujan_classic_bs",
     "mpfr_const_pi",
     "arb_const_pi",
+    "chudnovsky_hybrid",
 ]
 
 

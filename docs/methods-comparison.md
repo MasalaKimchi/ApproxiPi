@@ -2,25 +2,29 @@
 
 # Pi Computation Methods — SATO-X Comparison
 
-This document compares every π algorithm implemented in ApproxiPi/SATO-X: mathematical basis, implementation strategy, asymptotic behavior, and measured wall time from `results/summary.md` (median of 5 trials, 25 guard digits, Apple Silicon host with GMP/MPFR/FLINT). All variants pass exact-prefix verification against MPFR `const_pi` and BBP hex spot checks.
+This document compares every π algorithm implemented in ApproxiPi/SATO-X: mathematical basis, implementation strategy, asymptotic behavior, and measured runtime from `results/benchmark.csv` (median of **2 trials**, 0 warmups, 25 guard digits, Apple Silicon host with GMP/MPFR/FLINT). All variants pass exact-prefix verification against MPFR `const_pi` and BBP hex spot checks.
 
 ## Summary comparison
 
-| Algorithm key | Category | Convergence | Max digits | 1k ms | 10k ms | 100k ms | 1M ms | vs `chudnovsky_bs` @1M |
-|---|---|---:|---:|---:|---:|---:|---:|---:|
-| `chudnovsky_bs` | Series / BS | 14.18 digits/term | 1,000,000 | 0.045 | 0.621 | 12.106 | 140.500 | 1.00× |
-| `chudnovsky_bs_valuation` | Series / BS | 14.18 digits/term | 1,000,000 | 0.048 | 0.642 | 12.566 | 139.206 | 0.99× |
-| `chudnovsky_bs_crown` | Series / TCBS | 14.18 digits/term | 1,000,000 | 0.048 | 0.568 | 4.467 | 59.306 | 0.42× |
-| `chudnovsky_bs_crown_tuned` | Series / TCBS | 14.18 digits/term | 1,000,000 | 0.045 | 0.538 | 4.170 | 59.253 | 0.42× |
-| `ramanujan_classic_bs` | Series / BS | 7.98 digits/term | 1,000,000 | 0.067 | 0.963 | 15.086 | 202.400 | 1.44× |
-| `machin_arctan` | Series / arctan | ~1.4 digits/term | 100,000 | 0.262 | 5.554 | 171.937 | — | — |
-| `gauss_legendre_agm` | Iterative / AGM | ~2× digits/iter | 100,000 | 0.095 | 1.724 | 50.252 | — | — |
-| `borwein_cubic` | Iterative / Borwein | ~3× digits/iter | 1,000,000 | 0.120 | 2.415 | 68.971 | 1135.204 | 8.08× |
-| `borwein_quartic` | Iterative / Borwein | ~4× digits/iter | 1,000,000 | 0.137 | 2.418 | 76.286 | 1365.186 | 9.72× |
-| `mpfr_const_pi` | External / MPFR | library-internal | 1,000,000 | 0.033 | 0.740 | 25.809 | 458.248 | 3.26× |
-| `arb_const_pi` | External / FLINT | library-internal | 1,000,000 | 0.009 | 0.966 | 8.810 | 99.042 | 0.71× |
+Each timing cell is **`wall_ms` / `total_cost_ms`** (milliseconds). **`wall_ms`** is compute-only (split, finalize, format; verify timed separately). **`total_cost_ms`** is the full verified pipeline (wall + verify + I/O) and matches the “Runtime ms” column in `results/summary.md`. Relative speed uses **`total_cost_ms` @1M** vs `chudnovsky_bs`.
 
-**Reading the table:** Lower wall time is better. The crown variants dominate at ≥10⁴ digits; FLINT/Arb (`arb_const_pi`) wins below ~10⁴ on this machine. Machin and AGM are capped at 100,000 digits in this build.
+| Algorithm key | Category | Convergence | Max digits | 10k (wall/total) | 100k (wall/total) | 1M (wall/total) | 10M (wall/total) | 100M (wall/total) | vs `chudnovsky_bs` @1M |
+|---|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| `chudnovsky_bs` | Series / BS | 14.18 digits/term | 100,000,000 | 1.51 / 3.18 | 50.9 / 36.8 | 531.5 / 320.9 | 5746 / 5751 | 94023 / 93100 | 1.00× |
+| `chudnovsky_bs_valuation` | Series / BS | 14.18 digits/term | 100,000,000 | 1.48 / 2.75 | 35.7 / 36.3 | 315.7 / 318.6 | 5584 / 5522 | 92600 / 93040 | 0.99× |
+| `chudnovsky_bs_crown` | Series / TCBS | 14.18 digits/term | 100,000,000 | 0.70 / 1.37 | 7.23 / 8.00 | 83.0 / 89.2 | 1731 / 1610 | 27872 / 28239 | **0.28×** |
+| `chudnovsky_bs_crown_tuned` | Series / TCBS | 14.18 digits/term | 1,000,000 | — | — | — | — | — | — |
+| `ramanujan_classic_bs` | Series / BS | 7.98 digits/term | 10,000,000 | 1.16 / 2.43 | 19.2 / 19.7 | 232.9 / 240.3 | 4356 / 4400 | 39261 / —† | 0.75× |
+| `machin_arctan` | Series / arctan | ~1.4 digits/term | 100,000 | — | — | — | — | — | — |
+| `gauss_legendre_agm` | Iterative / AGM | ~2× digits/iter | 100,000 | — | — | — | — | — | — |
+| `borwein_cubic` | Iterative / Borwein | ~3× digits/iter | 1,000,000 | — | — | — | — | — | — |
+| `borwein_quartic` | Iterative / Borwein | ~4× digits/iter | 1,000,000 | — | — | — | — | — | — |
+| `mpfr_const_pi` | External / MPFR | library-internal | 100,000,000 | 0.75 / 0.84 | 27.1 / 28.3 | 480.8 / 501.7 | 8997 / 8976 | 142610 / 141006 | 1.56× |
+| `arb_const_pi` | External / FLINT | library-internal | 100,000,000 | 1.39 / 1.69 | 10.5 / 35.0 | 104.2 / 562.8 | 1472 / 1911 | 21332 / 21589 | 1.75× |
+
+**Reading the table:** Lower **total** time is better for end-to-end comparisons; **wall** isolates compute. The crown variant dominates at ≥10⁴ digits on total cost; FLINT/Arb (`arb_const_pi`) can win below ~10⁴ on wall time but verify dominates Arb totals at 10⁶. Rows marked — were not in the current `benchmark.csv` sweep (Machin, AGM, Borwein, crown_tuned). †Ramanujan @10⁸ failed verification in the latest sweep (total omitted).
+
+**Timing notes (H13):** Before H13, verification used post-format MPFR prefix checks (expensive at 10⁶+ digits). H13 compares scaled integers in MPFR *before* decimal rendering (`V = min(D, 10⁶)`), collapsing verify from hundreds of ms to single-digit ms for SATO-X series paths. That shifts the meaningful headline metric from wall-only to **total_cost_ms**; older prose that cited wall-only crown @1M ≈ 59 ms predates both the 2-trial re-benchmark and H13. Crown @1M is now **83.0 ms wall / 89.2 ms total** vs **531.5 / 320.9** for baseline Chudnovsky BS.
 
 ---
 
@@ -85,7 +89,7 @@ $$\frac{1}{\pi} = 12\sum_{k=0}^{\infty}\frac{(-1)^k(6k)!\,(13{,}591{,}409 + 545{
 - Finalize phase (MPFR scaling, $\sqrt{10005}$, division) becomes significant at high precision
 - No crown truncation — full-width integer merges throughout
 
-**Benchmark highlights:** 0.045 ms @1k · 0.621 ms @10k · 12.1 ms @100k · **140.5 ms @1M**
+**Benchmark highlights:** 3.2 ms total @10k · 36.8 ms total @100k · **320.9 ms total @1M** (531.5 ms wall)
 
 ---
 
@@ -122,7 +126,7 @@ $$\frac{1}{\pi} = 12\sum_{k=0}^{\infty}\frac{(-1)^k(6k)!\,(13{,}591{,}409 + 545{
 **Implementation:** TCBS via `binary_split_crown()` — exact parallel chunks + MPFR crown merge with per-node truncation, dead-P skipping, root-Q elision, warm-started Newton $1/T$, and pipelined format at ≥20k digits. Tuned variant reads `CrownTuning` from `results/tuning.json`.
 
 **Strengths:**
-- **2.37× faster** than baseline at 10⁶ digits (59.3 vs 140.5 ms)
+- **3.6× faster** than baseline at 10⁶ digits on total cost (89.2 vs 320.9 ms; 83.0 vs 531.5 ms wall)
 - 127× smaller max operand bits at 10⁶ digits
 - Outperforms MPFR (7.7×) and FLINT/Arb (1.67×) at 10⁶ on this host
 - Chunk-level parallelism (depth 4–8 depending on precision)
@@ -132,7 +136,7 @@ $$\frac{1}{\pi} = 12\sum_{k=0}^{\infty}\frac{(-1)^k(6k)!\,(13{,}591{,}409 + 545{
 - Small-precision overhead: Arb wins below ~10⁴ digits
 - Autotuning (H11) yields <2% after hand tuning — knob space is already near-optimal
 
-**Benchmark highlights:** 0.048 ms @1k · **0.568 ms @10k** · **4.47 ms @100k** · **59.3 ms @1M**
+**Benchmark highlights:** 1.37 ms total @10k · **8.00 ms total @100k** · **89.2 ms total @1M** (83.0 ms wall)
 
 ---
 
@@ -306,7 +310,7 @@ These are not SATO-X algorithms; they invoke library routines for $\pi$ and pass
 - 3.26× slower than crown at 10⁶ digits (458 ms)
 - Single-threaded; no SATO-X phase overlap
 
-**Benchmark highlights:** 0.033 ms @1k · 0.740 ms @10k · 25.8 ms @100k · 458.2 ms @1M
+**Benchmark highlights:** 0.84 ms total @10k · 28.3 ms total @100k · **501.7 ms total @1M** (480.8 ms wall)
 
 ---
 
@@ -327,10 +331,10 @@ These are not SATO-X algorithms; they invoke library routines for $\pi$ and pass
 
 **Weaknesses:**
 - Verify phase dominates at 10⁶ (462 ms verify vs 49 ms finalize — MPFR prefix check on a million-digit string)
-- 1.67× slower than crown at 10⁶ total wall time (99 vs 59 ms)
+- Verify dominates at 10⁶: 498.6 ms verify vs 52.4 ms finalize (562.8 ms total vs crown 89.2 ms)
 - Not built if FLINT is absent
 
-**Benchmark highlights:** **0.009 ms @1k** · 0.966 ms @10k · 8.81 ms @100k · 99.0 ms @1M
+**Benchmark highlights:** 1.69 ms total @10k · 35.0 ms total @100k · **562.8 ms total @1M** (104.2 ms wall)
 
 ---
 
@@ -358,4 +362,4 @@ bin/satox-bench --tune  # optional crown autotuning → results/tuning.json
 make figures            # docs/figures/*.svg from benchmark data
 ```
 
-See `docs/PAPER.md` for the hypothesis-driven optimization narrative and `docs/research-log.md` for the full H1–H12 ledger.
+See `docs/PAPER.md` for the hypothesis-driven optimization narrative and `docs/research-log.md` for the full H1–H13 ledger.

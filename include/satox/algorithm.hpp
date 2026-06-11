@@ -77,6 +77,8 @@ std::unique_ptr<PiAlgorithm> make_chudnovsky_crown_algorithm();
 // Crown variant that loads the autotuned knob profile (results/tuning.json)
 // produced by `satox-bench --tune`; unsupported when no profile exists.
 std::unique_ptr<PiAlgorithm> make_chudnovsky_crown_tuned_algorithm();
+// H15: merge-adaptive crown depth (extra truncation when merge dominates chunks).
+std::unique_ptr<PiAlgorithm> make_chudnovsky_crown_h15_algorithm();
 std::unique_ptr<PiAlgorithm> make_ramanujan_algorithm();
 std::unique_ptr<PiAlgorithm> make_machin_algorithm();
 std::unique_ptr<PiAlgorithm> make_agm_algorithm();
@@ -86,5 +88,8 @@ std::unique_ptr<PiAlgorithm> make_borwein_quartic_algorithm();
 // and FLINT/Arb's arb_const_pi, run through the same format/verify pipeline.
 std::unique_ptr<PiAlgorithm> make_mpfr_const_pi_algorithm();
 std::unique_ptr<PiAlgorithm> make_arb_const_pi_algorithm();
+// H14 scale-aware router: crown below crossover, arb_const_pi at and above.
+std::unique_ptr<PiAlgorithm> make_chudnovsky_hybrid_algorithm();
+const char *hybrid_delegate_name(int decimal_digits);
 
 } // namespace satox
