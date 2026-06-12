@@ -67,9 +67,11 @@ class BbpHexExtractAlgorithm final : public PiAlgorithm {
         }
         result.verified = ok;
         result.verify_ms = verify_timer.wall_ms();
-        result.wall_ms = timer.wall_ms();
+        const double elapsed_wall_ms = timer.wall_ms();
+        result.wall_ms =
+            elapsed_wall_ms > result.verify_ms ? elapsed_wall_ms - result.verify_ms : 0.0;
         result.cpu_ms = timer.cpu_ms();
-        result.total_cost_ms = result.wall_ms + result.verify_ms;
+        result.total_cost_ms = result.wall_ms + result.verify_ms + result.io_ms;
         result.verification_method = "BBP hex self-consistency";
         return result;
     }

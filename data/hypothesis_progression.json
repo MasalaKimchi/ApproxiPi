@@ -2,7 +2,7 @@
   "digits": 1000000,
   "metric": "compute_wall_ms",
   "metric_definition": "split_ms + finalize_ms + format_ms (verification excluded)",
-  "notes": "H0-H12: compute wall from docs/research-log.md development ledger (5 trials, pre-H13 harness). H13-H15/H20/H22: median compute_wall remeasured on current host where source=benchmark; H13 and H21 change verification/total cost more than compute wall.",
+  "notes": "H0-H12: compute wall from docs/research-log.md development ledger (5 trials, pre-H13 harness). H13-H15/H20/H22/H40: median compute_wall remeasured on current host where source=benchmark; H13 and H21 change verification/total cost more than compute wall.",
   "stages": [
     {"id": "H0", "name": "H0 baseline", "compute_wall_ms": 144.2, "source": "research-log", "description": "exact binary splitting"},
     {"id": "H1", "name": "H1 crown", "compute_wall_ms": 130.5, "source": "research-log", "description": "truncated MPFR crown"},
@@ -18,6 +18,7 @@
     {"id": "H14", "name": "H14 hybrid router", "compute_wall_ms": 89.4, "source": "research-log", "description": "crown below 10^8, arb at 10^8+"},
     {"id": "H15", "name": "H15 merge-adaptive depth", "algorithm": "chudnovsky_bs_crown_h15", "source": "benchmark", "description": "+1 crown level when term scale is large"},
     {"id": "H20", "name": "H20 Arb pipeline", "algorithm": "arb_const_pi", "source": "benchmark", "description": "scaled verify + parallel decimal renderer for Arb"},
-    {"id": "H22", "name": "H22 hybrid retune", "algorithm": "chudnovsky_hybrid", "source": "benchmark", "description": "route to Arb from 10^6 digits"}
+    {"id": "H22", "name": "H22 hybrid retune", "algorithm": "chudnovsky_hybrid", "source": "benchmark", "description": "route to Arb from 10^6 digits"},
+    {"id": "H40", "name": "H40 final router", "algorithm": "chudnovsky_hybrid", "source": "benchmark", "description": "route to crown below 700k digits and Arb at or above 700k"}
   ]
 }

@@ -205,6 +205,12 @@ use crown where it wins, Arb where merge-bound.
 | **H22** | Retuned hybrid crossover | Separation in scale | After H20/H21, route to Arb from 10^6 digits; hybrid should match best delegate at 10^6 and 10^7 | Crown still beats Arb by >5% at 10^6/10^7 | hybrid wall/total |
 | **H23** | Measurement hygiene | Taking out | Normalize `total_cost_ms = wall_ms + verify_ms + io_ms` and recompute relative wall time on every merge | Any supported row has `total_cost_ms < wall_ms`; relative rows stay zero with a baseline present | benchmark CSV invariants |
 | **H24** | Ramanujan 100M guard falsifier | Parameter change | If failure is only guard budget, guard 100 or 1000 should verify | Same prefix hash fails at guard 100 and 1000 | correctness cap |
+| **H25** | Verify-format overlap | Prior action | Run scaled-integer verification on a private MPFR copy while radix rendering consumes the original; total cost should drop by roughly `min(format_ms, verify_ms)` at 10^6 | Copy/thread overhead erases the overlap, verification fails, or total cost remains unchanged | total_cost_ms |
+| **H26** | Shared scaled-integer snapshot | Taking out + Universality | Convert `pi_scaled` to an integer once and feed both verifier and formatter through 10^6 digits | At larger scales, integer downsampling dominates and total cost regresses | format/verify split |
+| **H27** | Baseline scaled finalizer | Universality | Move plain Chudnovsky finalization onto the same scaled integer renderer/verifier so baseline postprocessing stops paying redundant decimal work | Prefix hash changes or baseline total cost does not improve | chudnovsky_bs total |
+| **H28** | Formatter arity reduction | Segmentation | A 4-way formatter may reduce thread overhead at mid-size | Arb/baseline formatting regresses or total cost rises | format_ms |
+| **H29** | Guard-budget trim | Parameter change | Reducing the fixed guard bonus from 128 to 64 at small/mid scale preserves exact-prefix verification and trims MPFR work | Any verification failure or high-scale regression | verified + total |
+| **H30** | Reference-cache prewarm | Prior action | Build the trusted `floor(pi*10^V)` reference under the main computation so final verification does not cold-start it | 10^7 verification remains hundreds of ms or duplicate cache work appears | verify_ms |
 
 ### H15 prototype (`chudnovsky_bs_crown_h15`)
 
@@ -252,14 +258,14 @@ through 10^5 digits and Arb where the refreshed external pipeline wins from
 
 | Digits | Algorithm | wall_ms | total_cost_ms | format_ms | verify_ms | Delegate | Verified |
 |---:|---|---:|---:|---:|---:|---|---|
-| 10^5 | crown | 7.7 | 8.5 | 0.7 | 0.9 | - | yes |
-| 10^5 | Arb | 8.9 | 9.6 | 1.2 | 0.9 | - | yes |
-| 10^6 | crown | 102.5 | 118.4 | 8.0 | 18.8 | - | yes |
-| 10^6 | Arb | **80.3** | **98.0** | 18.0 | 18.5 | - | yes |
-| 10^6 | hybrid | **78.5** | **94.8** | 16.9 | 17.3 | Arb | yes |
-| 10^7 | crown | 1669 | 1702 | 166 | 74.6 | - | yes |
-| 10^7 | Arb | **912** | **974** | 267 | 70.2 | - | yes |
-| 10^7 | hybrid | 968 | 1020 | 271 | 71.5 | Arb | yes |
+| 10^5 | crown | 5.7 | 6.6 | 0.7 | 0.9 | - | yes |
+| 10^5 | Arb | 7.6 | 8.5 | 1.2 | 0.9 | - | yes |
+| 10^6 | crown | 83.7 | 102.5 | 8.0 | 18.8 | - | yes |
+| 10^6 | Arb | **80.3** | **98.8** | 18.0 | 18.5 | - | yes |
+| 10^6 | hybrid | **78.5** | **95.8** | 16.9 | 17.3 | Arb | yes |
+| 10^7 | crown | 1595 | 1669 | 166 | 74.6 | - | yes |
+| 10^7 | Arb | **912** | **982** | 267 | 70.2 | - | yes |
+| 10^7 | hybrid | 968 | 1039 | 271 | 71.5 | Arb | yes |
 
 **Verdict:** H20 confirmed for Arb wall and total cost; H21 confirmed as an
 important benchmark-harness efficiency improvement; H22 confirmed on the tested
@@ -270,16 +276,103 @@ hash-compared across rows by the benchmark outputs.
 
 ### H23-H24 measurement hygiene and Ramanujan cap
 
-**H23 result:** Merged benchmark rows now recompute relative wall time against
-the current `chudnovsky_bs` row at each precision, and summarized rows set
-`total_cost_ms = wall_ms + verify_ms + io_ms`. A CSV invariant pass found no
-remaining supported rows with `total_cost_ms < wall_ms` and no missing matrix
-cells.
+**H23/H25 result:** Merged benchmark rows now recompute relative wall time
+against the current `chudnovsky_bs` row at each precision, summarized rows keep
+the measured median `total_cost_ms` from trials, and SATO-X timer boundaries now
+exclude verification just like the external baselines. After H25, `total_cost_ms`
+is intentionally allowed to be less than `wall_ms + verify_ms + io_ms` when
+verification overlaps radix rendering; it must still be at least `wall_ms`.
+A CSV invariant pass found no remaining supported rows with `total_cost_ms <
+wall_ms` and no missing matrix cells.
+
+### H25 verify-format overlap
+
+**Implementation:** Crown, MPFR, and Arb compute `pi_scaled`, copy it once, then
+launch `verify_scaled_pi_mpfr()` on the copy while formatting renders the
+original. The copy avoids concurrent reads of the same MPFR object. Benchmark
+summaries now preserve the measured median `total_cost_ms` instead of
+reconstructing it from phase fields, so overlap appears as end-to-end runtime
+rather than accounting noise.
+
+**Benchmark** (5 trials, 1 warmup, guard 25, Apple Silicon, scratch outputs
+under `/tmp/satox-hyp*`):
+
+| Digits | Algorithm | Before total_ms | After total_ms | format_ms | verify_ms | Verified |
+|---:|---|---:|---:|---:|---:|---|
+| 10^5 | crown | 6.70 | 6.77 | 0.87 | 0.95 | yes |
+| 10^6 | crown | 90.85 | **84.53** | 15.06 | 17.94 | yes |
+| 10^6 | Arb | 95.10 | **79.01** | 17.62 | 19.72 | yes |
+| 10^6 | hybrid | 88.57 | **86.47** | 19.17 | 20.93 | yes |
+
+**Verdict: confirmed at 10^6, neutral at 10^5.** The win is limited by the
+shorter of verification and formatting plus MPFR-copy overhead. It is most
+useful once both stages are tens of milliseconds; at 10^5 the extra thread/copy
+is within noise. Correctness is unchanged: all rows retain the same prefix hash
+as the baseline.
+
+### H26-H30 representation, guard, and cache loop
+
+**Hypotheses tested:** five branches were tested after H25:
+
+| # | Idea | Result | Verdict |
+|---|---|---|---|
+| H26 | Shared scaled-integer snapshot for verifier + formatter | At 10^6: crown total ~84.5 -> **~81.7 ms**, Arb ~79.0 -> **~74.2 ms** in focused scratch runs. At 10^7, naive integer downsampling made verify hundreds of ms. | confirmed only with scale gate |
+| H27 | Apply scaled finalizer to plain `chudnovsky_bs` | 10^6 baseline total moved from ~316 ms pre-loop to **~266 ms** in the final focused run, with identical prefix hash. | confirmed |
+| H28 | 4-way instead of 8-way integer formatter | 10^6 Arb format regressed to ~35 ms and total to ~89 ms; baseline format also regressed. | refuted and reverted |
+| H29 | Trim small/mid fixed guard bonus 128 -> 64 | Verified at 10^5 and 10^6; term count drops by 5 terms at 10^6 and crown total stayed around **~81 ms**. High-scale crown still uses the existing larger guard tiers. | confirmed for <=10^6 |
+| H30 | Prewarm reference integer cache concurrently | 10^7 single-row crown verify dropped from **~632 ms** after the H26 regression to **~69 ms**, restoring H13/H25-class verification cost. | confirmed |
+
+**Integrated policy:** use shared scaled-integer snapshots only through
+`10^6` digits. Above that, the verifier returns to the MPFR scaled path while
+the reference cache is warmed under the main computation. Decimal rendering
+keeps the 8-way split; the 4-way experiment was slower outside a narrow noisy
+crown case. The final focused 10^6 scratch run after H30:
+
+| Algorithm | total_ms | wall_ms | format_ms | verify_ms | Verified |
+|---|---:|---:|---:|---:|---|
+| `chudnovsky_bs` | 266.4 | 249.3 | 16.5 | 17.2 | yes |
+| `chudnovsky_bs_crown` | 81.7 | 64.7 | 13.7 | 17.0 | yes |
+| `arb_const_pi` | 74.2 | 55.7 | 16.3 | 17.1 | yes |
+| `chudnovsky_hybrid` | 76.0 | 58.7 | 16.4 | 18.4 | yes |
+
+The 10^7 crown smoke row remained verified with prefix hash `941cb5edb92e9f46`
+and `verify_ms=69.4`.
 
 **H24 result:** `ramanujan_classic_bs` at 10^8 failed exact-prefix verification
 with guard 25, guard 100, and guard 1000, producing the same failing prefix hash
 for the high-guard trials. That falsifies the simple "insufficient guard"
 explanation. The algorithm is capped at 10^7 until a focused derivation/kernel
 audit explains the 10^8 failure.
+
+### H31-H40 final algorithm selection
+
+**Goal:** test ten more falsifiable hypotheses after H30 and close the v1
+algorithm policy. Scratch runs were written under `/tmp/satox-h31-*` through
+`/tmp/satox-h37-*`; they were not merged into the canonical CSV because they
+were boundary probes rather than full-ladder publication runs.
+
+| # | Hypothesis | Evidence | Verdict |
+|---|---|---|---|
+| H31 | The Arb crossover is below the old 10^6 hybrid threshold | 3-trial coarse probe: crown/tuned win at 250k and 500k; Arb/hybrid win at 750k and 1M | confirmed |
+| H32 | The crossover boundary is near 700k digits | 600k: crown 43.8 ms total vs Arb 49.5; 650k: hybrid/crown 49.4-50.4 vs Arb 51.8; 700k: crown/Arb/tuned all ~54-55 | confirmed |
+| H33 | Arb-backed hybrid remains best at multi-million scales | 1-trial probe: 2M hybrid 155.8 ms total, Arb 168.8, tuned crown 187.8; 5M/10M Arb-backed hybrid remains ahead of crown variants | confirmed |
+| H34 | The high-scale hybrid abort is a routing bug, not an algorithm failure | Hybrid at 2M aborted before `bin/satox-bench` was rebuilt; isolated cause was clearing an uninitialized `mpz_t` in the external MPFR/Arb >1M verifier branch | confirmed and fixed |
+| H35 | Guard trimming did not create a small/mid correctness hole | guard 0 and guard 75 probes at 100k and 1M verified across crown, tuned crown, Arb, and hybrid | confirmed for probed scales |
+| H36 | Retuning hybrid to 700k preserves boundary behavior | After `kHybridArbCrossoverDigits = 700000`, hybrid delegates to crown at 650k and Arb at 700k/750k/1M; all rows verified | confirmed |
+| H37 | Cross-algorithm prefix hashes remain coherent after the changes | Scratch invariant pass found exactly one prefix hash per `(digits, guard)` among verified rows from 100k through 10M | confirmed |
+| H38 | Ramanujan must stay capped above 10^7 | 20M and 100M requests now report `requested precision exceeds algorithm max_digits` instead of producing risky rows | confirmed |
+| H39 | Tuned crown should be promoted into the public router | Tuned crown beats plain crown at 1M+ but still loses to Arb-backed hybrid from 700k upward when FLINT is present | refuted for FLINT builds |
+| H40 | Final v1 policy can be closed without adding another kernel | Best verified policy is scale routing: crown below 700k, Arb at/above 700k when available; tuned crown remains the best in-repo high-scale row and fallback candidate when FLINT is absent | confirmed |
+
+**Final algorithms for v1:**
+
+- `chudnovsky_hybrid` is the default recommendation on hosts with FLINT/Arb:
+  it routes to `chudnovsky_bs_crown` below 700,000 digits and `arb_const_pi`
+  at or above 700,000 digits.
+- `chudnovsky_bs_crown_tuned` is retained as the strongest in-repo Chudnovsky
+  crown variant for benchmark comparison and non-FLINT environments, but it is
+  not the public router delegate on this Apple Silicon/FLINT host.
+- `chudnovsky_bs` remains the correctness and relative-speed baseline.
+- `ramanujan_classic_bs` remains a verified comparator through 10^7 digits only.
 
 **Current high-priority objectives:** see `docs/high-priority-objectives.md`.

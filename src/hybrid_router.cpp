@@ -7,10 +7,10 @@
 
 namespace satox {
 
-// Empirical crossover after H20/H21: crown wins through 10^5 digits, while
-// Arb wins wall and total cost from 10^6 upward once it uses the same
-// scaled-integer verification and parallel decimal renderer.
-constexpr int kHybridArbCrossoverDigits = 1'000'000;
+// Empirical crossover after H20-H35: crown wins through about 650k digits,
+// while Arb wins wall and total cost from roughly 700k upward once it uses the
+// same scaled-integer verification and parallel decimal renderer.
+constexpr int kHybridArbCrossoverDigits = 700'000;
 
 const char *hybrid_delegate_name(int decimal_digits) {
 #ifdef SATOX_HAVE_FLINT

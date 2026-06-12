@@ -150,6 +150,40 @@ bool verify_scaled_pi_mpfr(mpfr_srcptr candidate_scaled, int digits_after_decima
                                       elapsed_ms);
 }
 
+bool verify_scaled_pi_mpz(const mpz_t candidate_scaled_int, int digits_after_decimal,
+                          int guard_digits, double *elapsed_ms) {
+    const Timer timer;
+    const int verify_digits =
+        digits_after_decimal > kSampleVerifyCap ? kSampleVerifyCap : digits_after_decimal;
+
+    mpz_t candidate_sample;
+    mpz_t reference_z;
+    mpz_init(candidate_sample);
+    mpz_init(reference_z);
+
+    if (digits_after_decimal > verify_digits) {
+        mpz_t p10_drop;
+        mpz_init(p10_drop);
+        mpz_ui_pow_ui(p10_drop, 10ul,
+                      static_cast<unsigned long>(digits_after_decimal - verify_digits));
+        mpz_tdiv_q(candidate_sample, candidate_scaled_int, p10_drop);
+        mpz_clear(p10_drop);
+    } else {
+        mpz_set(candidate_sample, candidate_scaled_int);
+    }
+
+    reference_pi_scaled_mpz_cached(verify_digits, guard_digits, reference_z);
+    const bool ok = mpz_cmp(candidate_sample, reference_z) == 0;
+
+    mpz_clear(reference_z);
+    mpz_clear(candidate_sample);
+
+    if (elapsed_ms != nullptr) {
+        *elapsed_ms = timer.wall_ms();
+    }
+    return ok;
+}
+
 bool verify_unscaled_pi_mpfr(mpfr_srcptr pi, int digits_after_decimal, int guard_digits,
                              double *elapsed_ms) {
     const int precision_bits = bits_for_decimal_digits(digits_after_decimal, guard_digits);
@@ -164,6 +198,15 @@ bool verify_unscaled_pi_mpfr(mpfr_srcptr pi, int digits_after_decimal, int guard
     mpz_clear(p10);
     mpfr_clear(scaled);
     return ok;
+}
+
+void warm_pi_reference_cache(int digits_after_decimal, int guard_digits) {
+    const int verify_digits =
+        digits_after_decimal > kSampleVerifyCap ? kSampleVerifyCap : digits_after_decimal;
+    mpz_t reference;
+    mpz_init(reference);
+    reference_pi_scaled_mpz_cached(verify_digits, guard_digits, reference);
+    mpz_clear(reference);
 }
 
 bool valid_digit_request(int decimal_digits, int guard_digits, std::string *error) {

@@ -10,22 +10,22 @@ Each timing cell is **`wall_ms` / `total_cost_ms`** (milliseconds). **`wall_ms`*
 
 | Algorithm key | Category | Convergence | Max digits | 10k (wall/total) | 100k (wall/total) | 1M (wall/total) | 10M (wall/total) | 100M (wall/total) | vs `chudnovsky_bs` @1M |
 |---|---|---:|---:|---:|---:|---:|---:|---:|---:|
-| `chudnovsky_bs` | Series / BS | 14.18 digits/term | 100,000,000 | 1.37 / 1.40 | 33.5 / 34.4 | 324 / 341 | 5477 / 5547 | 94023 / 94603 | 1.00× |
-| `chudnovsky_bs_valuation` | Series / BS | 14.18 digits/term | 100,000,000 | 1.47 / 1.51 | 32.2 / 33.1 | 785 / 1267 | 5464 / 5533 | 92870 / 93454 | 3.71× |
-| `chudnovsky_bs_crown` | Series / TCBS | 14.18 digits/term | 100,000,000 | 1.02 / 1.05 | 6.65 / 7.56 | 103 / 121 | 1669 / 1744 | 29574 / 30701 | **0.36×** |
-| `chudnovsky_bs_crown_tuned` | Series / TCBS | 14.18 digits/term | 100,000,000 | 1.16 / 1.19 | 6.74 / 7.64 | 86.4 / 103.6 | 1268 / 1338 | 23696 / 24311 | **0.30×** |
-| `ramanujan_classic_bs` | Series / BS | 7.98 digits/term | 10,000,000 | 1.14 / 1.17 | 18.1 / 19.0 | 233 / 241 | 4886 / 5423 | — | 0.71× |
-| `machin_arctan` | Series / arctan | ~1.4 digits/term | 100,000 | — | — | — | — | — | — |
-| `gauss_legendre_agm` | Iterative / AGM | ~2× digits/iter | 100,000 | — | — | — | — | — | — |
-| `borwein_cubic` | Iterative / Borwein | ~3× digits/iter | 1,000,000 | — | — | — | — | — | — |
-| `borwein_quartic` | Iterative / Borwein | ~4× digits/iter | 1,000,000 | — | — | — | — | — | — |
-| `mpfr_const_pi` | External / MPFR | library-internal | 100,000,000 | 0.85 / 0.88 | 25.7 / 26.6 | 444 / 461 | 8314 / 8383 | 133903 / 134484 | 1.35× |
-| `arb_const_pi` | External / FLINT | library-internal | 100,000,000 | 0.89 / 0.92 | 7.56 / 8.47 | 80.3 / 98.8 | 912 / 982 | 12888 / 13940 | **0.29×** |
-| `chudnovsky_hybrid` | Router | scale-aware | 100,000,000 | 0.92 / 0.95 | 6.61 / 7.51 | 78.5 / 95.8 | 968 / 1039 | 12508 / 13086 | **0.28×** |
+| `chudnovsky_bs` | Series / BS | 14.18 digits/term | 100,000,000 | 1.34 / 1.37 | 32.6 / 33.5 | 307 / 324 | 5408 / 5477 | 93442 / 94023 | 1.00x |
+| `chudnovsky_bs_valuation` | Series / BS | 14.18 digits/term | 100,000,000 | 1.43 / 1.47 | 31.6 / 32.4 | 302 / 785 | 5396 / 5464 | 92287 / 92870 | 2.42x |
+| `chudnovsky_bs_crown` | Series / TCBS | 14.18 digits/term | 100,000,000 | 0.98 / 1.02 | 5.74 / 6.64 | 83.7 / 103 | 1595 / 1669 | 28447 / 29574 | **0.32x** |
+| `chudnovsky_bs_crown_tuned` | Series / TCBS | 14.18 digits/term | 100,000,000 | 1.12 / 1.16 | 5.84 / 6.74 | 69.2 / 86.4 | 1199 / 1268 | 23080 / 23696 | **0.27x** |
+| `ramanujan_classic_bs` | Series / BS | 7.98 digits/term | 10,000,000 | 1.11 / 1.14 | 17.2 / 18.1 | 225 / 233 | 4349 / 4886 | — | 0.72x |
+| `machin_arctan` | Series / arctan | ~1.4 digits/term | 100,000 | 6.32 / 6.41 | 175 / 177 | — | — | — | — |
+| `gauss_legendre_agm` | Iterative / AGM | ~2x digits/iter | 100,000 | 1.75 / 1.91 | 50.9 / 54.8 | — | — | — | — |
+| `borwein_cubic` | Iterative / Borwein | ~3x digits/iter | 1,000,000 | 2.55 / 2.64 | 70.8 / 72.7 | 1167 / 1671 | — | — | 5.15x |
+| `borwein_quartic` | Iterative / Borwein | ~4x digits/iter | 1,000,000 | 2.70 / 2.90 | 77.2 / 81.1 | 1372 / 1442 | — | — | 4.45x |
+| `mpfr_const_pi` | External / MPFR | library-internal | 100,000,000 | 0.85 / 0.88 | 25.7 / 26.6 | 444 / 461 | 8314 / 8383 | 133903 / 134484 | 1.42x |
+| `arb_const_pi` | External / FLINT | library-internal | 100,000,000 | 0.89 / 0.92 | 7.56 / 8.47 | 80.3 / 98.8 | 912 / 982 | 12888 / 13940 | **0.30x** |
+| `chudnovsky_hybrid` | Router | scale-aware | 100,000,000 | 0.89 / 0.92 | 5.70 / 6.61 | 78.5 / 95.8 | 968 / 1039 | 12508 / 13086 | **0.30x** |
 
-**Reading the table:** Lower **total** time is better for end-to-end comparisons; **wall** isolates compute. After H20/H21, FLINT/Arb (`arb_const_pi`) uses the same scaled-integer verification and parallel decimal rendering as the crown path, so the hybrid router now uses crown below 10⁶ digits and Arb at 10⁶+. Rows marked — are unsupported at that scale. Ramanujan is capped at 10⁷ after 10⁸ failed even with guard 1000.
+**Reading the table:** Lower **total** time is better for end-to-end comparisons; **wall** isolates compute. After H20/H21, FLINT/Arb (`arb_const_pi`) uses the same scaled-integer verification and parallel decimal rendering as the crown path. H31-H40 retuned the hybrid router to use crown below 700,000 digits and Arb at 700,000+. Rows marked — are unsupported at that scale. Ramanujan is capped at 10⁷ after 10⁸ failed even with guard 1000.
 
-**Timing notes (H13/H20/H21/H23):** Before H13, verification used post-format MPFR prefix checks (expensive at 10⁶+ digits). H13 compares scaled integers in MPFR *before* decimal rendering (`V = min(D, 10⁶)`). H20 applies that same path and the parallel decimal renderer to MPFR/Arb baselines; H21 caches the reference scaled integer per precision. H23 normalized merged `total_cost_ms = wall_ms + verify_ms + io_ms`. Crown @1M is now **102.5 ms wall / 121.4 ms total**, while the refreshed hybrid is **78.5 / 95.8**.
+**Timing notes (H13/H20/H21/H23/H25/H31-H40):** Before H13, verification used post-format MPFR prefix checks (expensive at 10^6+ digits). H13 compares scaled integers in MPFR *before* decimal rendering (`V = min(D, 10^6)`). H20 applies that same path and the parallel decimal renderer to MPFR/Arb baselines; H21 caches the reference scaled integer per precision. H23 normalized merged `total_cost_ms = wall_ms + verify_ms + io_ms`; H25 aligned timer boundaries so `wall_ms` excludes verification for SATO-X and external rows. H31-H40 lower the hybrid Arb crossover from 10^6 to 700,000 digits after focused boundary probes.
 
 ---
 
@@ -291,7 +291,7 @@ $$\pi \approx \frac{1}{a_n}$$
 
 ## External baselines
 
-These are not SATO-X algorithms; they invoke library routines for $\pi$ and pass the result through the same format and verify **correctness** gate (prefix hash). **Timer boundaries are not yet apples-to-apples** — see the open issue in [`benchmark-timing-fairness.md`](benchmark-timing-fairness.md) before trusting cross-family `wall_ms` rankings.
+These are not SATO-X algorithms; they invoke library routines for $\pi$ and pass the result through the same format and verify **correctness** gate (prefix hash). Timer boundaries are now apples-to-apples: `wall_ms` excludes verification, while `total_cost_ms` includes verification exactly once.
 
 ### MPFR `const_pi` — `mpfr_const_pi`
 

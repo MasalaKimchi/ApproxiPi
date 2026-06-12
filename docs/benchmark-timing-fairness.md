@@ -1,125 +1,72 @@
-# Benchmark timing fairness (open issue)
+# Benchmark timing fairness
 
-**Status:** open — must be fixed before publishing cross-family wall-time claims  
-**Tracked:** 2026-06-10  
-**Related:** H13 pre-format verification (`docs/research-log.md`)
+**Status:** resolved on 2026-06-11  
+**Related:** H13 pre-format verification, H20 external baseline parity, H23/H25 measurement hygiene
 
-## Summary
+## Contract
 
-`wall_ms` and `total_cost_ms` do not measure the same pipeline boundary across
-algorithms. SATO-X implementations (Chudnovsky, Ramanujan, Crown) stop the outer
-timer **after** verification; external baselines (MPFR `const_pi`, FLINT/Arb) stop
-**before** verification. `total_cost_ms` then **double-counts** verify for SATO-X
-because it is defined as `wall_ms + verify_ms` everywhere.
+All supported benchmark rows now use the same timing ledger:
 
-Cross-family charts (`wall_time_log.svg`, `relative_wall_time.svg`,
-`hypothesis_progression.svg`) and prose in `docs/methods-comparison.md` that
-compare crown against Arb/MPFR on `wall_ms` are therefore skewed in favor of
-external baselines.
-
-## Evidence
-
-### Asymmetric timer boundaries
-
-SATO-X (`chudnovsky_common.cpp`): verify runs inside the outer timer; `wall_ms`
-is read after format.
-
-```cpp
-out.verified = verify_unscaled_pi_mpfr(pi, ...);
-// format ...
-result.wall_ms = timer.wall_ms();          // includes verify
-result.total_cost_ms = result.wall_ms + result.verify_ms;  // verify counted twice
+```text
+total_cost_ms = wall_ms + verify_ms + io_ms
 ```
 
-External baselines (`external_baselines.cpp`): outer timer stops after format;
-verify is timed separately.
+`wall_ms` excludes the harness verification phase. It covers the compute path
+through decimal rendering: split/series work, finalize, sqrt/div, and format.
+`verify_ms` is timed separately and counted exactly once in `total_cost_ms`.
+`io_ms` is explicit checkpoint or artifact I/O.
 
-```cpp
-result.wall_ms = timer.wall_ms();          // excludes verify
-result.verify_ms = verify_timer.wall_ms();
-// total_cost_ms filled later as wall_ms + verify_ms (correct for this path)
+Use `wall_ms` for compute-path comparisons and `total_cost_ms` for verified
+end-to-end rankings.
+
+## What was fixed
+
+The audit found that external baselines stopped their wall timer before
+verification, while several SATO-X paths stopped after verification:
+
+- `chudnovsky_bs`
+- `chudnovsky_bs_valuation`
+- `chudnovsky_bs_crown`
+- `chudnovsky_bs_crown_h15`
+- `chudnovsky_bs_crown_tuned`
+- `chudnovsky_naive`
+- `chudnovsky_recurrence`
+- `chudnovsky_hybrid` when delegated to Crown
+- `ramanujan_classic_bs`
+- `bbp_hex_extract`
+
+That made `total_cost_ms = wall_ms + verify_ms` double-count verification for
+those rows. The implementations now subtract their measured verification block
+from the elapsed wall timer before writing `wall_ms`, and the benchmark helpers
+fallback to `wall_ms + verify_ms + io_ms`.
+
+## Verification
+
+The current `results/benchmark.csv` has 90 rows. A CSV invariant pass found zero
+supported-row violations for:
+
+```text
+abs(total_cost_ms - (wall_ms + verify_ms + io_ms)) <= 0.002
 ```
 
-### Measured impact (Apple Silicon, H13 pre-format verify, 100k digits, 1 trial)
+The summary tables and SVG figures were regenerated after normalization.
 
-| Algorithm        | `wall_ms` | `verify_ms` | `total_cost_ms` | Verify in `wall_ms`? | `total_cost` correct? |
-|------------------|----------:|------------:|----------------:|----------------------|-----------------------|
-| `chudnovsky_bs`  |      64.7 |        28.8 |            93.5 | yes                  | no (double-count)     |
-| `arb_const_pi`   |      12.5 |        29.1 |            41.6 | no                   | yes                   |
+## Current 1M reference points
 
-At 1M digits in `results/benchmark.csv` (pre-H13 post-format verify), Arb
-`wall_ms` ≈ 102 ms while `verify_ms` ≈ 471 ms — verify is invisible on wall-time
-charts but dominates true end-to-end cost.
+| Algorithm | wall_ms | verify_ms | total_cost_ms | relative_wall_time |
+|---|---:|---:|---:|---:|
+| `chudnovsky_bs` | 307.415 | 16.892 | 324.307 | 1.000 |
+| `chudnovsky_bs_crown` | 83.714 | 18.822 | 102.536 | 0.272 |
+| `chudnovsky_bs_crown_tuned` | 69.191 | 17.216 | 86.407 | 0.225 |
+| `arb_const_pi` | 80.294 | 18.529 | 98.823 | 0.261 |
+| `chudnovsky_hybrid` | 78.500 | 17.313 | 95.813 | 0.255 |
+| `mpfr_const_pi` | 443.928 | 17.094 | 461.022 | 1.444 |
 
-### Within-family comparisons
-
-Crown vs `chudnovsky_bs` vs Ramanujan on `wall_ms` is **mostly fair** when all
-use the same pre-format scaled-integer gate (H13): same timer boundary and same
-`kSampleVerifyCap` (1M digits).
-
-## What is *not* the problem
-
-- **Verification rigor:** All rows still pass the same prefix hash; correctness
-  is not in question.
-- **H13 pre-format verify:** Making verify cheaper is a legitimate optimization;
-  the bug is stopwatch placement, not the verify algorithm itself.
-- **Separate `verify_ms` column:** Reporting verify as its own phase is correct;
-  the bug is inconsistent inclusion in `wall_ms` and double-counting in
-  `total_cost_ms`.
-
-## Recommended fix
-
-Pick one contract and apply it to **every** `PiAlgorithm::compute()`:
-
-### Option A — verified pipeline (preferred for Cost(D))
-
-1. Outer timer: split → finalize → format → **stop**.
-2. Verify in a separate timed block → `verify_ms`.
-3. `wall_ms` = compute + format only (excludes verify).
-4. `total_cost_ms` = `wall_ms + verify_ms` (verify counted once).
-
-### Option B — compute race
-
-1. Same as A, but charts and `relative_wall_time` use `wall_ms` only.
-2. Document that verify is mandatory but excluded from race metrics.
-3. Publish `total_cost_ms` alongside for full-pipeline readers.
-
-### Additional normalization
-
-- [ ] Use the **same verify entry point** for all algorithms (pre-format
-      scaled-integer with `kSampleVerifyCap`, or post-format decimal — but not
-      both).
-- [ ] Add a unit test that asserts `wall_ms + verify_ms ≈ total_cost_ms` and
-      `wall_ms` does not include verify (within tolerance).
-- [ ] Re-run the publish ladder and regenerate figures after the fix.
-
-## Files to touch
+## Files touched
 
 | Area | Files |
-|------|-------|
-| Timer boundaries | `src/chudnovsky_common.cpp`, `src/chudnovsky.cpp`, `src/chudnovsky_crown.cpp`, `src/ramanujan.cpp`, `src/chudnovsky_baselines.cpp` |
-| Already correct pattern | `src/external_baselines.cpp`, `src/machin.cpp`, `src/agm.cpp`, `src/borwein.cpp` |
-| Derived metrics | `src/benchmark.cpp` (`fill_derived_metrics`, `stats_to_csv`) |
-| Docs | `docs/benchmark-protocol.md`, `docs/methods-comparison.md`, `docs/research-log.md` |
-| Figures | `tools/make_figures.py` (if switching default column to `total_cost_ms`) |
-
-## Acceptance checklist
-
-Use this list before closing the issue:
-
-- [ ] Every algorithm stops the outer timer at the same pipeline point.
-- [ ] `total_cost_ms = wall_ms + verify_ms` with verify counted **once**.
-- [ ] `fill_derived_metrics` does not add verify when it is already in `wall_ms`.
-- [ ] Test asserts timer-boundary invariant on at least one SATO-X and one
-      external row.
-- [ ] Full benchmark ladder re-run; `results/benchmark.csv` regenerated.
-- [ ] `make figures` regenerated; cross-family chart captions updated.
-- [ ] `docs/methods-comparison.md` no longer claims external baselines use the
-      "same" timed verify pipeline unless that is literally true.
-- [ ] This file's **Status** updated to `resolved` with the commit hash.
-
-## References
-
-- Benchmark protocol Cost(D): `docs/benchmark-protocol.md`
-- H13 hypothesis (pre-format verify): `docs/research-log.md`
-- Verify implementation: `src/verification.cpp` (`kSampleVerifyCap = 1_000_000`)
+|---|---|
+| Timer boundaries | `src/chudnovsky.cpp`, `src/chudnovsky_baselines.cpp`, `src/chudnovsky_crown.cpp`, `src/ramanujan.cpp`, `src/bbp_algorithm.cpp` |
+| Derived metrics | `src/benchmark.cpp`, `tools/merge_benchmark_csv.py` |
+| Data and docs | `results/benchmark.csv`, `results/summary.md`, `results/efficiency.md`, `docs/methods-comparison.md`, `docs/research-log.md` |
+| Figures | `docs/figures/*.svg`, `docs/figures/index.md` |

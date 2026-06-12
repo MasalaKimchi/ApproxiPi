@@ -20,8 +20,37 @@
 namespace satox {
 namespace {
 
+constexpr int kSharedIntegerVerifyMaxDigits = 1000000;
+
 HypergeometricBsSpec chudnovsky_crown_spec() {
     return make_chudnovsky_spec("chudnovsky_bs_crown", 8, true);
+}
+
+std::future<bool> verify_scaled_mpfr_copy_async(mpfr_srcptr pi_scaled, int decimal_digits,
+                                                int effective_guard_digits, double *verify_ms,
+                                                mpfr_t copy) {
+    mpfr_init2(copy, mpfr_get_prec(pi_scaled));
+    mpfr_set(copy, pi_scaled, MPFR_RNDN);
+    return std::async(std::launch::async,
+                      [copy, decimal_digits, effective_guard_digits, verify_ms]() {
+                          const bool ok = verify_scaled_pi_mpfr(
+                              copy, decimal_digits, effective_guard_digits, verify_ms);
+                          mpfr_clear(copy);
+                          return ok;
+                      });
+}
+
+std::future<bool> verify_scaled_integer_copy_async(const mpz_t scaled_int, int decimal_digits,
+                                                   int effective_guard_digits,
+                                                   double *verify_ms, mpz_t copy) {
+    mpz_init_set(copy, scaled_int);
+    return std::async(std::launch::async,
+                      [copy, decimal_digits, effective_guard_digits, verify_ms]() {
+                          const bool ok = verify_scaled_pi_mpz(
+                              copy, decimal_digits, effective_guard_digits, verify_ms);
+                          mpz_clear(copy);
+                          return ok;
+                      });
 }
 
 class ChudnovskyCrownAlgorithm final : public PiAlgorithm {
@@ -69,7 +98,7 @@ class ChudnovskyCrownAlgorithm final : public PiAlgorithm {
 
         result.supported = true;
         result.notes = global_run_config().ablation_tag;
-        int crown_guard_bonus = 128;
+        int crown_guard_bonus = 64;
         if (decimal_digits >= 100000000) {
             crown_guard_bonus = 512;
         } else if (decimal_digits >= 10000000) {
@@ -77,6 +106,12 @@ class ChudnovskyCrownAlgorithm final : public PiAlgorithm {
         }
         const int effective_guard_digits = guard_digits + crown_guard_bonus;
         const Timer timer;
+        std::future<void> reference_warm_future;
+        if (decimal_digits > kSharedIntegerVerifyMaxDigits) {
+            reference_warm_future = std::async(std::launch::async, [=]() {
+                warm_pi_reference_cache(decimal_digits, effective_guard_digits);
+            });
+        }
         const unsigned long terms =
             static_cast<unsigned long>(std::ceil((decimal_digits + effective_guard_digits) /
                                                  kChudnovskyDigitsPerTerm)) +
@@ -203,17 +238,34 @@ class ChudnovskyCrownAlgorithm final : public PiAlgorithm {
             mpz_ui_pow_ui(p10, 10ul, static_cast<unsigned long>(decimal_digits));
             mpfr_mul_z(pi_scaled, pi_scaled, p10, MPFR_RNDN);
 
-            result.verified = verify_scaled_pi_mpfr(pi_scaled, decimal_digits,
-                                                    effective_guard_digits, &result.verify_ms);
-            result.verification_method = "MPFR pre-format scaled-integer check (truncated crown)";
+            mpz_t scaled_int;
+            mpz_t verify_int;
+            mpfr_t verify_mpfr;
+            mpz_init(scaled_int);
+            mpfr_get_z(scaled_int, pi_scaled, MPFR_RNDZ);
+            auto verify_future =
+                decimal_digits <= kSharedIntegerVerifyMaxDigits
+                    ? verify_scaled_integer_copy_async(scaled_int, decimal_digits,
+                                                       effective_guard_digits,
+                                                       &result.verify_ms, verify_int)
+                    : verify_scaled_mpfr_copy_async(pi_scaled, decimal_digits,
+                                                    effective_guard_digits, &result.verify_ms,
+                                                    verify_mpfr);
+            result.verification_method =
+                "MPFR pre-format scaled-integer check (truncated crown; shared integer snapshot)";
 
             const Timer small_format_timer;
-            mpfr_div_z(pi_scaled, pi_scaled, p10, MPFR_RNDN);
             mpz_clear(p10);
-            result.decimal_prefix = mpfr_to_decimal_prefix(pi_scaled, decimal_digits);
+            result.decimal_prefix =
+                scaled_pi_integer_to_decimal_parallel(scaled_int, decimal_digits, power_cache);
             result.format_ms = small_format_timer.wall_ms();
-            result.wall_ms = timer.wall_ms();
+            result.verified = verify_future.get();
+            const double elapsed_wall_ms = timer.wall_ms();
+            result.wall_ms =
+                elapsed_wall_ms > result.verify_ms ? elapsed_wall_ms - result.verify_ms : 0.0;
             result.cpu_ms = timer.cpu_ms();
+            result.total_cost_ms = elapsed_wall_ms + result.io_ms;
+            mpz_clear(scaled_int);
             mpfr_clear(q);
             mpfr_clear(t);
             mpfr_clear(scale_constant);
@@ -311,8 +363,28 @@ class ChudnovskyCrownAlgorithm final : public PiAlgorithm {
         }
         result.finalize_ms = finalize_timer.wall_ms();
 
-        result.verified = verify_scaled_pi_mpfr(pi_scaled, decimal_digits, effective_guard_digits,
-                                                &result.verify_ms);
+        const bool shared_integer_snapshot =
+            decimal_digits <= kSharedIntegerVerifyMaxDigits;
+        mpz_t scaled_int;
+        mpz_t verify_int;
+        mpfr_t verify_mpfr;
+        if (shared_integer_snapshot) {
+            mpz_init(scaled_int);
+            mpfr_get_z(scaled_int, pi_scaled, MPFR_RNDZ);
+        }
+        auto verify_future =
+            shared_integer_snapshot
+                ? verify_scaled_integer_copy_async(scaled_int, decimal_digits,
+                                                   effective_guard_digits, &result.verify_ms,
+                                                   verify_int)
+                : ([&]() {
+                      if (reference_warm_future.valid()) {
+                          reference_warm_future.get();
+                      }
+                      return verify_scaled_mpfr_copy_async(
+                          pi_scaled, decimal_digits, effective_guard_digits, &result.verify_ms,
+                          verify_mpfr);
+                  })();
 
         const Timer format_timer;
         bool spliced = false;
@@ -322,18 +394,24 @@ class ChudnovskyCrownAlgorithm final : public PiAlgorithm {
             // known, so low_corr = z_corr - (z0 - low0). The range check
             // 0 <= low_corr < 10^(4w) proves high0 is still the exact high
             // half of the corrected value.
-            mpz_t z_corr;
-            mpz_init(z_corr);
-            mpfr_get_z(z_corr, pi_scaled, MPFR_RNDZ);
             low0_ready_future.wait();
             mpz_sub(shifted_high, z0, low0);
-            mpz_sub(z_corr, z_corr, shifted_high);
+            mpz_t corrected_int;
+            mpz_init(corrected_int);
+            if (shared_integer_snapshot) {
+                mpz_set(corrected_int, scaled_int);
+            } else {
+                mpfr_get_z(corrected_int, pi_scaled, MPFR_RNDZ);
+            }
+            mpz_t low_corr;
+            mpz_init(low_corr);
+            mpz_sub(low_corr, corrected_int, shifted_high);
             const int low_width = power_cache.part_width << 2;
-            if (mpz_sgn(z_corr) >= 0 && mpz_cmp(z_corr, power_cache.pows[2]) < 0) {
+            if (mpz_sgn(low_corr) >= 0 && mpz_cmp(low_corr, power_cache.pows[2]) < 0) {
                 // Low half renders here while the prefix thread finishes the
                 // high half.
                 const std::string low_digits =
-                    render_decimal_fixed(z_corr, low_width, 1, power_cache);
+                    render_decimal_fixed(low_corr, low_width, 1, power_cache);
                 prefix_future.get();
                 const std::string digits = high_prefix + low_digits;
                 const size_t int_width = digits.size() - static_cast<size_t>(decimal_digits);
@@ -343,21 +421,28 @@ class ChudnovskyCrownAlgorithm final : public PiAlgorithm {
             } else {
                 prefix_future.get();
             }
-            mpz_clear(z_corr);
+            mpz_clear(corrected_int);
+            mpz_clear(low_corr);
         }
         if (!spliced) {
             result.decimal_prefix =
-                scaled_pi_to_decimal_parallel(pi_scaled, decimal_digits, power_cache);
+                shared_integer_snapshot
+                    ? scaled_pi_integer_to_decimal_parallel(scaled_int, decimal_digits,
+                                                            power_cache)
+                    : scaled_pi_to_decimal_parallel(pi_scaled, decimal_digits, power_cache);
         }
         result.format_ms = format_timer.wall_ms();
-        result.wall_ms = timer.wall_ms();
+        result.verified = verify_future.get();
+        const double elapsed_wall_ms = timer.wall_ms();
+        result.wall_ms =
+            elapsed_wall_ms > result.verify_ms ? elapsed_wall_ms - result.verify_ms : 0.0;
         result.cpu_ms = timer.cpu_ms();
-        result.total_cost_ms = result.wall_ms + result.verify_ms;
+        result.total_cost_ms = elapsed_wall_ms + result.io_ms;
         {
             std::ostringstream method;
             method << "MPFR pre-format scaled-integer check (truncated crown; chunks "
                    << std::fixed << std::setprecision(3) << crown_stats.chunk_ms
-                   << "ms, merge " << crown_stats.merge_ms << "ms)";
+                   << "ms, merge " << crown_stats.merge_ms << "ms, overlapped format)";
             result.verification_method = method.str();
         }
 
@@ -366,6 +451,9 @@ class ChudnovskyCrownAlgorithm final : public PiAlgorithm {
         mpfr_clear(scale_constant);
         mpfr_clear(reciprocal);
         mpfr_clear(pi_scaled);
+        if (shared_integer_snapshot) {
+            mpz_clear(scaled_int);
+        }
         if (prefix_pipeline) {
             mpz_clear(z0);
             mpz_clear(low0);

@@ -105,11 +105,8 @@ std::string render_decimal_fixed(const mpz_t value, int width, int level,
 
 std::string scaled_pi_to_decimal_parallel(mpfr_t value_scaled, int digits_after_decimal,
                                           const DecimalPowerCache &cache) {
-    const int total_width = digits_after_decimal + 1;
-
     if (!cache.ready || cache.digits != digits_after_decimal ||
-        digits_after_decimal < kMinParallelFormatDigits ||
-        total_width - 7 * cache.part_width < 1 || mpfr_sgn(value_scaled) <= 0) {
+        digits_after_decimal < kMinParallelFormatDigits || mpfr_sgn(value_scaled) <= 0) {
         // Undo the 10^digits scaling and use the serial formatter.
         mpfr_t value;
         mpfr_init2(value, mpfr_get_prec(value_scaled));
@@ -126,9 +123,28 @@ std::string scaled_pi_to_decimal_parallel(mpfr_t value_scaled, int digits_after_
     mpz_t z;
     mpz_init(z);
     mpfr_get_z(z, value_scaled, MPFR_RNDZ);
-    std::string digits = render_fixed_decimal(z, total_width, 2, cache);
+    std::string out = scaled_pi_integer_to_decimal_parallel(z, digits_after_decimal, cache);
     mpz_clear(z);
+    return out;
+}
 
+std::string scaled_pi_integer_to_decimal_parallel(const mpz_t value_scaled_int,
+                                                  int digits_after_decimal,
+                                                  const DecimalPowerCache &cache) {
+    const int total_width = digits_after_decimal + 1;
+    if (!cache.ready || cache.digits != digits_after_decimal ||
+        digits_after_decimal < kMinParallelFormatDigits ||
+        total_width - 7 * cache.part_width < 1 || mpz_sgn(value_scaled_int) <= 0) {
+        const std::string digits = mpz_fixed_width_decimal(value_scaled_int, total_width);
+        std::string out;
+        out.reserve(digits.size() + 1);
+        out += digits.substr(0, digits.size() - static_cast<size_t>(digits_after_decimal));
+        out += '.';
+        out += digits.substr(digits.size() - static_cast<size_t>(digits_after_decimal));
+        return out;
+    }
+
+    std::string digits = render_fixed_decimal(value_scaled_int, total_width, 2, cache);
     std::string out;
     out.reserve(digits.size() + 1);
     out += digits.substr(0, digits.size() - static_cast<size_t>(digits_after_decimal));

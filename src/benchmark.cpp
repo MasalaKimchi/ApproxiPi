@@ -69,16 +69,23 @@ std::string result_to_csv(const ComputeResult &result, const std::string &baseli
         << result.decimal_digits << ',' << result.guard_digits << ',' << 1 << ','
         << (result.supported ? "true" : "false") << ',' << (result.verified ? "true" : "false")
         << ',' << std::fixed << std::setprecision(3) << result.wall_ms << ','
-        << result.wall_ms << ',' << result.wall_ms << ',' << 0.0 << ',' << result.cpu_ms << ','
-        << result.split_ms << ',' << result.finalize_ms << ',' << result.format_ms << ','
-        << result.verify_ms         << ',' << result.terms_or_iterations << ',' << std::setprecision(6)
+        << result.wall_ms << ',' << result.wall_ms << ',' << 0.0 << ','
+        << result.total_cost_ms << ',' << result.cpu_ms << ',' << result.split_ms << ','
+        << result.series_ms << ',' << result.bigint_ms << ',' << result.finalize_ms << ','
+        << result.sqrt_div_ms << ',' << result.format_ms << ',' << result.verify_ms << ','
+        << result.io_ms << ',' << result.terms_or_iterations << ',' << std::setprecision(6)
         << result.estimated_digits_per_term << ',' << result.gcd_reductions << ','
         << std::setprecision(3) << result.cancelled_bits << ',' << result.max_operand_bits << ','
         << result.parallel_depth << ',' << result.mul_count << ',' << std::setprecision(0)
-        << result.mul_bit_volume << std::setprecision(3) << ',' << '"'
+        << result.mul_bit_volume << std::setprecision(3) << ',' << result.peak_rss_bytes << ','
+        << result.bytes_read << ',' << result.bytes_written << ',' << result.energy_joules << ','
+        << result.mean_power_watts << ',' << result.digits_per_sec << ','
+        << result.digits_per_joule << ',' << result.digits_per_gb << ','
+        << result.efficiency_score << ',' << result.verified_digits_per_dollar << ',' << '"'
         << result.verification_method << '"'
         << ',' << baseline_name << ',' << std::setprecision(6) << relative << ','
-        << short_hash(result.decimal_prefix) << ',' << '"' << result.error << '"' << '\n';
+        << short_hash(result.decimal_prefix) << ',' << '"' << result.notes << '"' << ','
+        << '"' << result.error << '"' << '\n';
     return out.str();
 }
 
@@ -86,7 +93,7 @@ namespace {
 
 void fill_derived_metrics(ComputeResult &result, const BenchmarkOptions &options) {
     if (result.total_cost_ms <= 0.0) {
-        result.total_cost_ms = result.wall_ms + result.verify_ms;
+        result.total_cost_ms = result.wall_ms + result.verify_ms + result.io_ms;
     }
     if (result.verified && result.total_cost_ms > 0.0) {
         result.digits_per_sec =
@@ -177,6 +184,7 @@ struct ResultStats {
     ComputeResult representative;
     int trials = 0;
     double median_wall_ms = 0.0;
+    double median_total_cost_ms = 0.0;
     double min_wall_ms = 0.0;
     double max_wall_ms = 0.0;
     double stddev_wall_ms = 0.0;
@@ -221,6 +229,7 @@ ResultStats summarize_results(std::vector<ComputeResult> results) {
     }
     stats.representative = results.front();
     std::vector<double> wall;
+    std::vector<double> total_cost;
     std::vector<double> cpu;
     std::vector<double> split;
     std::vector<double> finalize;
@@ -228,6 +237,7 @@ ResultStats summarize_results(std::vector<ComputeResult> results) {
     std::vector<double> verify;
     for (const ComputeResult &result : results) {
         wall.push_back(result.wall_ms);
+        total_cost.push_back(result.total_cost_ms);
         cpu.push_back(result.cpu_ms);
         split.push_back(result.split_ms);
         finalize.push_back(result.finalize_ms);
@@ -239,6 +249,7 @@ ResultStats summarize_results(std::vector<ComputeResult> results) {
         }
     }
     stats.median_wall_ms = median(wall);
+    stats.median_total_cost_ms = median(total_cost);
     stats.min_wall_ms = *std::min_element(wall.begin(), wall.end());
     stats.max_wall_ms = *std::max_element(wall.begin(), wall.end());
     stats.stddev_wall_ms = stddev(wall);
@@ -253,8 +264,7 @@ ResultStats summarize_results(std::vector<ComputeResult> results) {
     stats.representative.finalize_ms = stats.median_finalize_ms;
     stats.representative.format_ms = stats.median_format_ms;
     stats.representative.verify_ms = stats.median_verify_ms;
-    stats.representative.total_cost_ms =
-        stats.median_wall_ms + stats.median_verify_ms + stats.representative.io_ms;
+    stats.representative.total_cost_ms = stats.median_total_cost_ms;
     return stats;
 }
 
@@ -272,8 +282,9 @@ std::string stats_to_csv(const ResultStats &stats, const std::string &baseline_n
         << (result.verified ? "true" : "false") << ',' << std::fixed
         << std::setprecision(3) << stats.median_wall_ms << ',' << stats.min_wall_ms << ','
         << stats.max_wall_ms << ',' << stats.stddev_wall_ms << ','
-        << (result.total_cost_ms > 0.0 ? result.total_cost_ms : stats.median_wall_ms +
-                                                                 stats.median_verify_ms)
+        << (stats.median_total_cost_ms > 0.0
+                ? stats.median_total_cost_ms
+                : stats.median_wall_ms + stats.median_verify_ms + result.io_ms)
         << ',' << stats.median_cpu_ms << ',' << stats.median_split_ms << ','
         << result.series_ms << ',' << result.bigint_ms << ',' << stats.median_finalize_ms << ','
         << result.sqrt_div_ms << ',' << stats.median_format_ms << ',' << stats.median_verify_ms
@@ -308,11 +319,13 @@ std::string result_to_json(const ComputeResult &result, const std::string &basel
         << "\"supported\":" << (result.supported ? "true" : "false") << ','
         << "\"verified\":" << (result.verified ? "true" : "false") << ','
         << "\"wall_ms\":" << std::fixed << std::setprecision(3) << result.wall_ms << ','
+        << "\"total_cost_ms\":" << result.total_cost_ms << ','
         << "\"cpu_ms\":" << result.cpu_ms << ','
         << "\"split_ms\":" << result.split_ms << ','
         << "\"finalize_ms\":" << result.finalize_ms << ','
         << "\"format_ms\":" << result.format_ms << ','
         << "\"verify_ms\":" << result.verify_ms << ','
+        << "\"io_ms\":" << result.io_ms << ','
         << "\"terms_or_iterations\":" << result.terms_or_iterations << ','
         << "\"estimated_digits_per_term\":" << std::setprecision(6)
         << result.estimated_digits_per_term << ','

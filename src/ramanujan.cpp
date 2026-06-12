@@ -109,9 +109,11 @@ class RamanujanAlgorithm final : public PiAlgorithm {
         const Timer format_timer;
         result.decimal_prefix = mpfr_to_decimal_prefix(pi, decimal_digits);
         result.format_ms = format_timer.wall_ms();
-        result.wall_ms = timer.wall_ms();
+        const double elapsed_wall_ms = timer.wall_ms();
+        result.wall_ms =
+            elapsed_wall_ms > result.verify_ms ? elapsed_wall_ms - result.verify_ms : 0.0;
         result.cpu_ms = timer.cpu_ms();
-        result.total_cost_ms = result.wall_ms + result.verify_ms;
+        result.total_cost_ms = result.wall_ms + result.verify_ms + result.io_ms;
         result.verification_method = "MPFR scaled-integer prefix + modular residues";
 
         mpfr_clears(q, t, denominator, pi, sqrt2, (mpfr_ptr)nullptr);

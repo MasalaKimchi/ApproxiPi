@@ -8,8 +8,14 @@
 #include <mpfr.h>
 
 #include <cmath>
+#include <future>
 
 namespace satox {
+namespace {
+
+constexpr int kSharedIntegerVerifyMaxDigits = 1000000;
+
+} // namespace
 
 HypergeometricBsSpec make_chudnovsky_spec(const std::string &id, unsigned long leaf_block_terms,
                                           bool leaf_pq_cancellation) {
@@ -43,6 +49,12 @@ ChudnovskyFinalizeResult finalize_chudnovsky_pi(const HypergeometricBsResult &no
     ChudnovskyFinalizeResult out;
     const int precision_bits = bits_for_decimal_digits(decimal_digits, effective_guard_digits);
     const Timer finalize_timer;
+    std::future<void> reference_warm_future;
+    if (decimal_digits > kSharedIntegerVerifyMaxDigits) {
+        reference_warm_future = std::async(std::launch::async, [=]() {
+            warm_pi_reference_cache(decimal_digits, effective_guard_digits);
+        });
+    }
     mpfr_t q;
     mpfr_t t;
     mpfr_t sqrt_10005;
@@ -63,16 +75,61 @@ ChudnovskyFinalizeResult finalize_chudnovsky_pi(const HypergeometricBsResult &no
     out.sqrt_div_ms += finalize_timer.wall_ms() - sqrt_timer.wall_ms();
     out.finalize_ms = finalize_timer.wall_ms();
 
-    out.verified = verify_unscaled_pi_mpfr(pi, decimal_digits, effective_guard_digits,
-                                           &out.verify_ms);
+    DecimalPowerCache power_cache;
+    build_decimal_power_cache(decimal_digits, power_cache);
+    mpfr_t pi_scaled;
+    mpfr_init2(pi_scaled, static_cast<mpfr_prec_t>(precision_bits));
+    mpfr_mul_z(pi_scaled, pi, power_cache.p10_full, MPFR_RNDN);
+    const bool shared_integer_snapshot =
+        decimal_digits <= kSharedIntegerVerifyMaxDigits;
+    mpz_t scaled_int;
+    mpz_t verify_int;
+    mpfr_t verify_scaled;
+    if (shared_integer_snapshot) {
+        mpz_init(scaled_int);
+        mpz_init(verify_int);
+        mpfr_get_z(scaled_int, pi_scaled, MPFR_RNDZ);
+    }
+    std::future<bool> verify_future;
+    if (shared_integer_snapshot) {
+        mpz_set(verify_int, scaled_int);
+        verify_future = std::async(std::launch::async, [&]() {
+            const bool ok =
+                verify_scaled_pi_mpz(verify_int, decimal_digits, effective_guard_digits,
+                                     &out.verify_ms);
+            mpz_clear(verify_int);
+            return ok;
+        });
+    } else {
+        mpz_clear(verify_int);
+        mpfr_init2(verify_scaled, static_cast<mpfr_prec_t>(precision_bits));
+        mpfr_set(verify_scaled, pi_scaled, MPFR_RNDN);
+        if (reference_warm_future.valid()) {
+            reference_warm_future.get();
+        }
+        verify_future = std::async(std::launch::async, [&]() {
+            const bool ok =
+                verify_scaled_pi_mpfr(verify_scaled, decimal_digits, effective_guard_digits,
+                                      &out.verify_ms);
+            mpfr_clear(verify_scaled);
+            return ok;
+        });
+    }
 
     const Timer format_timer;
+    (void)streaming_format;
     out.decimal_prefix =
-        streaming_format ? mpfr_to_decimal_prefix_streaming(pi, decimal_digits)
-                         : mpfr_to_decimal_prefix(pi, decimal_digits);
+        shared_integer_snapshot
+            ? scaled_pi_integer_to_decimal_parallel(scaled_int, decimal_digits, power_cache)
+            : scaled_pi_to_decimal_parallel(pi_scaled, decimal_digits, power_cache);
     out.format_ms = format_timer.wall_ms();
-    out.verification_method = "MPFR pre-format scaled-integer check";
+    out.verified = verify_future.get();
+    out.verification_method = "MPFR pre-format scaled-integer check (shared integer snapshot)";
 
+    if (shared_integer_snapshot) {
+        mpz_clear(scaled_int);
+    }
+    mpfr_clear(pi_scaled);
     mpfr_clear(q);
     mpfr_clear(t);
     mpfr_clear(sqrt_10005);

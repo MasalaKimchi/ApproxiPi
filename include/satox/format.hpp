@@ -39,6 +39,9 @@ void build_decimal_power_cache(int digits_after_decimal, DecimalPowerCache &cach
 // formatter when preconditions do not hold.
 std::string scaled_pi_to_decimal_parallel(mpfr_t value_scaled, int digits_after_decimal,
                                           const DecimalPowerCache &cache);
+std::string scaled_pi_integer_to_decimal_parallel(const mpz_t value_scaled_int,
+                                                  int digits_after_decimal,
+                                                  const DecimalPowerCache &cache);
 
 // Renders a non-negative integer as exactly `width` decimal digits
 // (zero-padded) with the cache's divide-and-conquer splitting; `level` 2 is

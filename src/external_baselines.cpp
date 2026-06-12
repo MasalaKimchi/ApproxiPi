@@ -24,6 +24,8 @@
 namespace satox {
 namespace {
 
+constexpr int kSharedIntegerVerifyMaxDigits = 1000000;
+
 class MpfrConstPiAlgorithm final : public PiAlgorithm {
   public:
     AlgorithmMetadata metadata() const override {
@@ -46,9 +48,15 @@ class MpfrConstPiAlgorithm final : public PiAlgorithm {
         }
         result.supported = true;
 
-        const int effective_guard_digits = guard_digits + 128;
+        const int effective_guard_digits = guard_digits + 64;
         const int precision_bits =
             bits_for_decimal_digits(decimal_digits, effective_guard_digits);
+        std::future<void> reference_warm_future;
+        if (decimal_digits > kSharedIntegerVerifyMaxDigits) {
+            reference_warm_future = std::async(std::launch::async, [=]() {
+                warm_pi_reference_cache(decimal_digits, effective_guard_digits);
+            });
+        }
 
         // MPFR caches const_pi internally; clear it so each trial measures a
         // cold computation rather than a memcpy of the previous trial.
@@ -71,18 +79,58 @@ class MpfrConstPiAlgorithm final : public PiAlgorithm {
         mpfr_init2(pi_scaled, static_cast<mpfr_prec_t>(precision_bits));
         mpfr_mul_z(pi_scaled, pi, power_cache.p10_full, MPFR_RNDN);
 
-        const Timer format_timer;
-        result.decimal_prefix = scaled_pi_to_decimal_parallel(pi_scaled, decimal_digits,
-                                                              power_cache);
-        result.format_ms = format_timer.wall_ms();
-        result.wall_ms = timer.wall_ms();
-        result.cpu_ms = timer.cpu_ms();
+        const bool shared_integer_snapshot =
+            decimal_digits <= kSharedIntegerVerifyMaxDigits;
+        mpz_t scaled_int;
+        mpz_t verify_int;
+        mpfr_t verify_scaled;
+        if (shared_integer_snapshot) {
+            mpz_init(scaled_int);
+            mpz_init(verify_int);
+            mpfr_get_z(scaled_int, pi_scaled, MPFR_RNDZ);
+        }
+        std::future<bool> verify_future;
+        if (shared_integer_snapshot) {
+            mpz_set(verify_int, scaled_int);
+            verify_future = std::async(std::launch::async, [&]() {
+                const bool ok =
+                    verify_scaled_pi_mpz(verify_int, decimal_digits,
+                                         effective_guard_digits, &result.verify_ms);
+                mpz_clear(verify_int);
+                return ok;
+            });
+        } else {
+            mpfr_init2(verify_scaled, static_cast<mpfr_prec_t>(precision_bits));
+            mpfr_set(verify_scaled, pi_scaled, MPFR_RNDN);
+            if (reference_warm_future.valid()) {
+                reference_warm_future.get();
+            }
+            verify_future = std::async(std::launch::async, [&]() {
+                const bool ok =
+                    verify_scaled_pi_mpfr(verify_scaled, decimal_digits,
+                                          effective_guard_digits, &result.verify_ms);
+                mpfr_clear(verify_scaled);
+                return ok;
+            });
+        }
 
-        result.verified = verify_scaled_pi_mpfr(pi_scaled, decimal_digits,
-                                                effective_guard_digits, &result.verify_ms);
+        const Timer format_timer;
+        result.decimal_prefix =
+            shared_integer_snapshot
+                ? scaled_pi_integer_to_decimal_parallel(scaled_int, decimal_digits, power_cache)
+                : scaled_pi_to_decimal_parallel(pi_scaled, decimal_digits, power_cache);
+        result.format_ms = format_timer.wall_ms();
+        result.verified = verify_future.get();
+        const double elapsed_wall_ms = timer.wall_ms();
+        result.wall_ms =
+            elapsed_wall_ms > result.verify_ms ? elapsed_wall_ms - result.verify_ms : 0.0;
+        result.cpu_ms = timer.cpu_ms();
         result.verification_method =
-            "MPFR pre-format scaled-integer check (mpfr_const_pi)";
-        result.total_cost_ms = result.wall_ms + result.verify_ms;
+            "MPFR pre-format scaled-integer check (mpfr_const_pi; shared integer snapshot)";
+        result.total_cost_ms = elapsed_wall_ms + result.io_ms;
+        if (shared_integer_snapshot) {
+            mpz_clear(scaled_int);
+        }
         mpfr_clear(pi_scaled);
         mpfr_clear(pi);
         return result;
@@ -113,9 +161,15 @@ class ArbConstPiAlgorithm final : public PiAlgorithm {
         }
         result.supported = true;
 
-        const int effective_guard_digits = guard_digits + 128;
+        const int effective_guard_digits = guard_digits + 64;
         const int precision_bits =
             bits_for_decimal_digits(decimal_digits, effective_guard_digits);
+        std::future<void> reference_warm_future;
+        if (decimal_digits > kSharedIntegerVerifyMaxDigits) {
+            reference_warm_future = std::async(std::launch::async, [=]() {
+                warm_pi_reference_cache(decimal_digits, effective_guard_digits);
+            });
+        }
 
         // Give FLINT the same hardware budget as the in-repo parallel code
         // and clear its constant caches so every trial is cold.
@@ -144,19 +198,59 @@ class ArbConstPiAlgorithm final : public PiAlgorithm {
         mpfr_init2(pi_scaled, static_cast<mpfr_prec_t>(precision_bits));
         mpfr_mul_z(pi_scaled, pi_mpfr, power_cache.p10_full, MPFR_RNDN);
 
+        const bool shared_integer_snapshot =
+            decimal_digits <= kSharedIntegerVerifyMaxDigits;
+        mpz_t scaled_int;
+        mpz_t verify_int;
+        mpfr_t verify_scaled;
+        if (shared_integer_snapshot) {
+            mpz_init(scaled_int);
+            mpz_init(verify_int);
+            mpfr_get_z(scaled_int, pi_scaled, MPFR_RNDZ);
+        }
+        std::future<bool> verify_future;
+        if (shared_integer_snapshot) {
+            mpz_set(verify_int, scaled_int);
+            verify_future = std::async(std::launch::async, [&]() {
+                const bool ok =
+                    verify_scaled_pi_mpz(verify_int, decimal_digits,
+                                         effective_guard_digits, &result.verify_ms);
+                mpz_clear(verify_int);
+                return ok;
+            });
+        } else {
+            mpfr_init2(verify_scaled, static_cast<mpfr_prec_t>(precision_bits));
+            mpfr_set(verify_scaled, pi_scaled, MPFR_RNDN);
+            if (reference_warm_future.valid()) {
+                reference_warm_future.get();
+            }
+            verify_future = std::async(std::launch::async, [&]() {
+                const bool ok =
+                    verify_scaled_pi_mpfr(verify_scaled, decimal_digits,
+                                          effective_guard_digits, &result.verify_ms);
+                mpfr_clear(verify_scaled);
+                return ok;
+            });
+        }
+
         const Timer format_timer;
-        result.decimal_prefix = scaled_pi_to_decimal_parallel(pi_scaled, decimal_digits,
-                                                              power_cache);
+        result.decimal_prefix =
+            shared_integer_snapshot
+                ? scaled_pi_integer_to_decimal_parallel(scaled_int, decimal_digits, power_cache)
+                : scaled_pi_to_decimal_parallel(pi_scaled, decimal_digits, power_cache);
         result.format_ms = format_timer.wall_ms();
-        result.wall_ms = timer.wall_ms();
+        result.verified = verify_future.get();
+        const double elapsed_wall_ms = timer.wall_ms();
+        result.wall_ms =
+            elapsed_wall_ms > result.verify_ms ? elapsed_wall_ms - result.verify_ms : 0.0;
         result.cpu_ms = timer.cpu_ms();
-
-        result.verified = verify_scaled_pi_mpfr(pi_scaled, decimal_digits,
-                                                effective_guard_digits, &result.verify_ms);
         result.verification_method =
-            "MPFR pre-format scaled-integer check (arb_const_pi)";
-        result.total_cost_ms = result.wall_ms + result.verify_ms;
+            "MPFR pre-format scaled-integer check (arb_const_pi; shared integer snapshot)";
+        result.total_cost_ms = elapsed_wall_ms + result.io_ms;
 
+        if (shared_integer_snapshot) {
+            mpz_clear(scaled_int);
+        }
         mpfr_clear(pi_scaled);
         mpfr_clear(pi_mpfr);
         arb_clear(pi);

@@ -42,7 +42,7 @@ class ChudnovskyNaiveAlgorithm final : public PiAlgorithm {
         }
 
         result.supported = true;
-        const int effective_guard_digits = guard_digits + 128;
+        const int effective_guard_digits = guard_digits + 64;
         const Timer timer;
         const unsigned long terms = chudnovsky_term_count(decimal_digits, effective_guard_digits);
         result.terms_or_iterations = terms;
@@ -70,9 +70,11 @@ class ChudnovskyNaiveAlgorithm final : public PiAlgorithm {
         result.verify_ms = fin.verify_ms;
         result.verified = fin.verified;
         result.verification_method = fin.verification_method;
-        result.wall_ms = timer.wall_ms();
+        const double elapsed_wall_ms = timer.wall_ms();
+        result.wall_ms =
+            elapsed_wall_ms > result.verify_ms ? elapsed_wall_ms - result.verify_ms : 0.0;
         result.cpu_ms = timer.cpu_ms();
-        result.total_cost_ms = result.wall_ms + result.verify_ms;
+        result.total_cost_ms = result.wall_ms + result.verify_ms + result.io_ms;
         return result;
     }
 };
@@ -105,7 +107,7 @@ class ChudnovskyRecurrenceAlgorithm final : public PiAlgorithm {
         }
 
         result.supported = true;
-        const int effective_guard_digits = guard_digits + 128;
+        const int effective_guard_digits = guard_digits + 64;
         const Timer timer;
         const unsigned long terms = chudnovsky_term_count(decimal_digits, effective_guard_digits);
         result.terms_or_iterations = terms;
@@ -138,9 +140,11 @@ class ChudnovskyRecurrenceAlgorithm final : public PiAlgorithm {
         result.verify_ms = fin.verify_ms;
         result.verified = fin.verified;
         result.verification_method = fin.verification_method;
-        result.wall_ms = timer.wall_ms();
+        const double elapsed_wall_ms = timer.wall_ms();
+        result.wall_ms =
+            elapsed_wall_ms > result.verify_ms ? elapsed_wall_ms - result.verify_ms : 0.0;
         result.cpu_ms = timer.cpu_ms();
-        result.total_cost_ms = result.wall_ms + result.verify_ms;
+        result.total_cost_ms = result.wall_ms + result.verify_ms + result.io_ms;
         return result;
     }
 };

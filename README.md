@@ -191,6 +191,10 @@ bin/satox-bench --ablation no_binary_split --digits 100000 --algorithms chudnovs
 
 ## Implemented Algorithms
 
+- `chudnovsky_hybrid`: recommended v1 entry point when FLINT/Arb is available.
+  It routes to `chudnovsky_bs_crown` below 700,000 digits and to
+  `arb_const_pi` at or above 700,000 digits. This threshold is based on the
+  H31-H40 crossover probes in `docs/research-log.md`.
 - `chudnovsky_naive`: term-by-term Chudnovsky (capped at 10^5).
 - `chudnovsky_recurrence`: blocked recurrence without binary tree (capped at 10^4).
 - `chudnovsky_bs`: Chudnovsky binary splitting baseline.
@@ -210,11 +214,13 @@ bin/satox-bench --ablation no_binary_split --digits 100000 --algorithms chudnovs
   change it, enforced by an integer range check with a re-render fallback).
   H13 adds pre-format scaled-integer verification (one `mpfr_const_pi` at
   `V = min(D, 10^6)` instead of five redundant full-precision round-trips).
-  Verified through 10^8 digits; ~2.8x faster than `chudnovsky_bs` at 10^6
-  total cost on this machine in the latest focused refresh. Hypothesis ledger
-  (H1–H22) is in `docs/research-log.md`.
+  Verified through 10^8 digits; materially faster than `chudnovsky_bs` at
+  10^6 total cost on this machine in the latest focused refresh. Hypothesis
+  ledger (H1-H40) is in `docs/research-log.md`.
 - `chudnovsky_bs_crown_tuned`: the same kernel driven by the cached autotune
-  profile (only listed when `results/tuning.json` exists).
+  profile (only listed when `results/tuning.json` exists). It is the strongest
+  in-repo high-scale Chudnovsky crown row, but FLINT-backed hybrid routing still
+  wins from the measured crossover upward on this host.
 - `ramanujan_classic_bs`: classical Ramanujan series with binary splitting
   (verified through 10^7; capped there after 10^8 failed even with large guard).
 - `machin_arctan`: independent Machin arctangent identity comparator.
